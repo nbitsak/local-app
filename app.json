@@ -4,10 +4,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "We need your location to show your position in map." 
-          }
-      ]
-    ]
+          "locationWhenInUsePermission": "We need your location to show your position in map."
+        }
+      ],
+      "expo-sqlite"
+    ],
     "name": "local-app",
     "slug": "local-app",
     "version": "1.0.0",
