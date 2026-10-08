@@ -31,8 +31,8 @@ export default function LocationScreen() {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
 
-  // Άμεσο μπλοκάρισμα δεύτερου πατήματος,
-  // πριν προλάβει να ενημερωθεί το loading.
+  // Immediately block a second button press
+  // before the loading state has updated.
   const requestInProgress = useRef(false);
 
   async function findLocation() {
@@ -51,7 +51,7 @@ export default function LocationScreen() {
         await ExpoLocation.requestForegroundPermissionsAsync();
 
       if (permission.status !== "granted") {
-        setError("Δεν δόθηκε άδεια πρόσβασης στην τοποθεσία.");
+        setError("Permission to access location was denied.");
         return;
       }
 
@@ -60,7 +60,7 @@ export default function LocationScreen() {
 
       if (!enabled) {
         setError(
-          "Ενεργοποίησε τις υπηρεσίες τοποθεσίας στο κινητό."
+          "Please enable location services on your device."
         );
         return;
       }
@@ -91,12 +91,12 @@ export default function LocationScreen() {
 
         if (!address) {
           setWarning(
-            "Δεν βρέθηκε διεύθυνση. Ο έλεγχος θα γίνει με τις συντεταγμένες."
+            "No address was found. The distance check will use the coordinates."
           );
         }
       } catch {
         setWarning(
-          "Η εύρεση διεύθυνσης απέτυχε. Ο έλεγχος θα γίνει με τις συντεταγμένες."
+          "Address lookup failed. The distance check will use the coordinates."
         );
       }
 
@@ -117,7 +117,7 @@ export default function LocationScreen() {
         ]
           .filter(Boolean)
           .join(", ") ||
-        `Θέση GPS: ${currentCoordinates.latitude.toFixed(6)}, ${
+        `GPS location: ${currentCoordinates.latitude.toFixed(6)}, ${
           currentCoordinates.longitude.toFixed(6)
         }`;
 
@@ -136,7 +136,7 @@ export default function LocationScreen() {
       setError(
         err instanceof Error
           ? err.message
-          : "Ο εντοπισμός ή η αποθήκευση απέτυχε."
+          : "Failed to retrieve or save the location."
       );
     } finally {
       requestInProgress.current = false;
@@ -148,7 +148,7 @@ export default function LocationScreen() {
     <View style={styles.container}>
       <View style={styles.controls}>
         <Button
-          title="Βρες και έλεγξε τη θέση μου"
+          title="Find and Check My Location"
           onPress={findLocation}
           disabled={loading}
         />
@@ -174,7 +174,7 @@ export default function LocationScreen() {
         {saveResult?.saved === true && (
           <View style={styles.resultInfo}>
             <Text style={styles.success}>
-              Η νέα τοποθεσία αποθηκεύτηκε.
+              The new location was saved.
             </Text>
 
             <Text>ID: {saveResult.location.id}</Text>
@@ -188,12 +188,12 @@ export default function LocationScreen() {
         {saveResult?.saved === false && (
           <View style={styles.resultInfo}>
             <Text style={styles.warning}>
-              Δεν δημιουργήθηκε νέα εγγραφή: υπάρχει
-              αποθηκευμένη θέση σε ακτίνα 100 μέτρων.
+              No new record was created: a saved location
+              already exists within a 100-meter radius.
             </Text>
 
             <Text>
-              Κοντινή εγγραφή:{" "}
+              Nearby record:{" "}
               {saveResult.existingLocation.real_location}
             </Text>
 
@@ -202,8 +202,8 @@ export default function LocationScreen() {
             </Text>
 
             <Text>
-              Απόσταση:{" "}
-              {saveResult.distanceMeters.toFixed(1)} μέτρα
+              Distance:{" "}
+              {saveResult.distanceMeters.toFixed(1)} meters
             </Text>
           </View>
         )}
@@ -221,7 +221,7 @@ export default function LocationScreen() {
         >
           <Marker
             coordinate={coordinates}
-            title="Τρέχουσα θέση"
+            title="Current Location"
           />
 
           {saveResult?.saved === false && (
@@ -232,7 +232,7 @@ export default function LocationScreen() {
                 longitude:
                   saveResult.existingLocation.longitude,
               }}
-              title="Κοντινή αποθηκευμένη θέση"
+              title="Nearby Saved Location"
               description={
                 saveResult.existingLocation.real_location
               }
