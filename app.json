@@ -1,5 +1,13 @@
 {
   "expo": {
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "We need your location to show your position in map." 
+          }
+      ]
+    ]
     "name": "local-app",
     "slug": "local-app",
     "version": "1.0.0",
