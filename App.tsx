@@ -20,11 +20,11 @@ const RootStack = createNativeStackNavigator({
   screens: {
     Home: {
       screen: HomeScreen,
-      options: {title: 'Welcome'},
+      options: {title: 'Localize'},
     },
     PreviousLocations: {
       screen: PreviousLocations,
-      options: {title: 'Previous Locations'},
+      options: {title: 'Locations'},
     },
     LocationDetails: {
       screen: LocationDetailsScreen,
