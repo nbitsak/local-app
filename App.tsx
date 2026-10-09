@@ -1,10 +1,10 @@
 import {createStaticNavigation} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import type { RootStackParamList } from './src/navigation/types';
-import LocationScreen from './src/screens/LocationScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import PreviousLocations from './src/screens/PreviousLocations';
 import LocationDetailsScreen from './src/screens/LocationDetailsScreen';
+import { NavigationContainer, getFocusedRouteNameFromRoute } from "@react-navigation/native";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -12,7 +12,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
   name="LocationDetails"
   component={LocationDetailsScreen}
   options={({ route }) => ({
-    title: route.params.location.real_location,
+    headerTitle: getFocusedRouteNameFromRoute(route) ?? "Map",
   })}
 />
 
@@ -21,10 +21,6 @@ const RootStack = createNativeStackNavigator({
     Home: {
       screen: HomeScreen,
       options: {title: 'Welcome'},
-    },
-    LocationScreen: {
-      screen: LocationScreen,
-      options: {title: 'Get Location'},
     },
     PreviousLocations: {
       screen: PreviousLocations,
