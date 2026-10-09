@@ -95,7 +95,7 @@ export default function PreviousLocations() {
   return (
     <SQLiteProvider
       databaseName="locations.db"
-      assetSource={{ assetId: require('./assets/locations.db') }}
+      assetSource={{ assetId: require('../../assets/locations.db') }}
     >
       <LocationsScreen />
     </SQLiteProvider>
