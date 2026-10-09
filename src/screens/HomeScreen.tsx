@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Image
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -272,6 +273,12 @@ export default function HomeScreen() {
 
         {/* Keep the main buttons at the bottom. */}
         <View style={styles.buttons}>
+          <Image
+              source={require("../../assets/prisma_logo.webp")}
+              style={styles.homeImage}
+               resizeMode="contain"
+               accessibilityLabel="Home illustration"
+            />
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ disabled: loading }}
@@ -375,5 +382,10 @@ const styles = StyleSheet.create({
   },
   success: {
     color: "green",
+  },
+  homeImage: {
+    width: "100%",
+    height: 200,
+    marginBottom: 0,
   },
 });
