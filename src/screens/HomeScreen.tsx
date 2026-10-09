@@ -13,7 +13,7 @@ export default function HomeScreen() {
        <Button
           title="Previous Locations"
           onPress={() =>
-                navigation.navigate('PreviousLocations' as never) 
+              navigation.navigate('PreviousLocations' as never) 
           }     
        />
        <Button 

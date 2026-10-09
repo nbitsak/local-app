@@ -13,7 +13,7 @@ import * as ExpoLocation from "expo-location";
 import {
   saveLocationIfFarEnough,
   type SaveLocationResult,
-} from "./database";
+} from "../../database";
 
 type Coordinates = {
   latitude: number;

@@ -1,8 +1,8 @@
 import {createStaticNavigation} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import LocationScreen from './LocationScreen';
-import HomeScreen from './HomeScreen';
-import PreviousLocations from './PreviousLocations';
+import LocationScreen from './src/screens/LocationScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import PreviousLocations from './src/screens/PreviousLocations';
 
 const RootStack = createNativeStackNavigator({
   screens: {
