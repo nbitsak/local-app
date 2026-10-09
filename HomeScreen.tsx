@@ -10,7 +10,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Text>Nice to have you here!</Text>
        <Button
           title="Previous Locations"
           onPress={() =>
@@ -33,6 +32,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end', 
+    paddingBottom: 40,
   },
 });

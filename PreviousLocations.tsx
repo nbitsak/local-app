@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FlatList, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 
 type Location = {
@@ -47,19 +47,47 @@ function LocationsScreen() {
 
   return (
     <FlatList
-      contentContainerStyle={{ padding: 24, paddingTop: 60 }}
+      contentContainerStyle={{ padding: 24, paddingTop: 30 }}
       data={locations}
       keyExtractor={(item) => String(item.id)}
-      renderItem={({ item }) => (
-        <View style={{ marginBottom: 20 }}>
-          <Text>{item.real_location}</Text>
-          <Text>{item.city}</Text>
-          <Text>
-            Latitude: {item.latitude} · Longitude: {item.longitude}
-          </Text>
-        </View>
+      ItemSeparatorComponent={() => (
+        <View
+          style={{
+          height: 1,
+          backgroundColor: '#ddd',
+          }}
+        />
       )}
-    />
+       renderItem={({ item }) => (
+         <Pressable
+             onPress={() => {
+               console.log('Selected location:', item);
+              // Add your navigation or other action here.
+              }}
+              style={({ pressed }) => ({
+              paddingVertical: 16,
+              paddingHorizontal: 12,
+             backgroundColor: pressed ? '#f0f0f0' : 'transparent',
+          })}
+        >
+        <Text style={{ fontSize: 16, fontWeight: '600' }}>
+          {item.real_location}
+        </Text>
+
+        <Text style={{ marginTop: 4, color: '#555' }}>
+          {item.city}
+       </Text>
+
+       <Text style={{ marginTop: 8 }}>
+          Latitude: {item.latitude}
+       </Text>
+
+       <Text style={{ marginTop: 4 }}>
+         Longitude: {item.longitude}
+        </Text>
+      </Pressable>
+    )}
+  />
   );
 }
 
