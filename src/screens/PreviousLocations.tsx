@@ -8,14 +8,20 @@ import {
   Text,
   View,
 } from "react-native";
+
 import {
   SQLiteProvider,
   useSQLiteContext,
 } from "expo-sqlite";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
-import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from
+  "@react-navigation/native-stack";
+
+import {
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -40,11 +46,10 @@ function LocationRow({
 }: LocationRowProps) {
   const swipeableRef = useRef<SwipeableMethods | null>(null);
 
-  async function handleSwipeOpen() {
+  async function handleSwipeOpen(): Promise<void> {
     try {
       await onDelete(location);
     } finally {
-      // Close the row if deletion was blocked or failed.
       swipeableRef.current?.close();
     }
   }
@@ -52,24 +57,27 @@ function LocationRow({
   return (
     <ReanimatedSwipeable
       ref={swipeableRef}
+      containerStyle={styles.swipeContainer}
       enabled={!disabled}
-       friction={2}
+      friction={2}
       rightThreshold={80}
-       overshootRight={false}
-       renderRightActions={() => (
-       <View style={styles.deleteAction}>
-         <Text style={styles.deleteActionText}>
+      overshootRight={false}
+      renderRightActions={() => (
+        <View style={styles.deleteAction}>
+          <Text style={styles.deleteActionText}>
             Delete
-         </Text>
-       </View>
-     )}
-     onSwipeableOpen={() => {
-        // Only right actions are configured,
-       // so opening the row follows a leftward swipe.
-       void handleSwipeOpen();
-       }}
-      >
+          </Text>
+        </View>
+      )}
+      onSwipeableOpen={() => {
+        void handleSwipeOpen();
+      }}
+    >
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          `Open saved location: ${location.real_location}`
+        }
         disabled={disabled}
         onPress={() => onOpen(location)}
         style={({ pressed }) => [
@@ -102,34 +110,36 @@ function LocationsScreen() {
   const db = useSQLiteContext();
 
   const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    useNavigation<
+      NativeStackNavigationProp<RootStackParamList>
+    >();
 
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Block overlapping deletions immediately.
   const deletionInProgress = useRef(false);
 
   useEffect(() => {
     let active = true;
 
-    async function loadLocations() {
-      try {
-        setError(null);
+    async function loadLocations(): Promise<void> {
+      setLoading(true);
+      setError(null);
 
+      try {
         const rows = await db.getAllAsync<Location>(
-          "SELECT * FROM locations ORDER BY id"
+          "SELECT * FROM locations ORDER BY id",
         );
 
         if (active) {
           setLocations(rows);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         if (active) {
           setError(
-            err instanceof Error ? err.message : String(err)
+            err instanceof Error ? err.message : String(err),
           );
         }
       } finally {
@@ -146,39 +156,39 @@ function LocationsScreen() {
     };
   }, [db]);
 
-  async function deleteLocation(location: Location) {
-    if (deletionInProgress.current) return;
+  async function deleteLocation(
+    location: Location,
+  ): Promise<void> {
+    if (deletionInProgress.current) {
+      return;
+    }
 
     deletionInProgress.current = true;
-
     setDeleting(true);
     setError(null);
 
     try {
-      // Enforce the minimum record count inside the DELETE statement.
       const result = await db.runAsync(
         `
           DELETE FROM locations
           WHERE id = ?
             AND (SELECT COUNT(*) FROM locations) > 1
         `,
-        location.id
+        location.id,
       );
 
       if (result.changes > 0) {
-        // Update the visible list only after database deletion succeeds.
         setLocations((currentLocations) =>
           currentLocations.filter(
-            (item) => item.id !== location.id
-          )
+            (item) => item.id !== location.id,
+          ),
         );
 
         return;
       }
 
-      // Refresh the list when the database did not delete a record.
       const rows = await db.getAllAsync<Location>(
-        "SELECT * FROM locations ORDER BY id"
+        "SELECT * FROM locations ORDER BY id",
       );
 
       setLocations(rows);
@@ -189,15 +199,15 @@ function LocationsScreen() {
       ) {
         Alert.alert(
           "Cannot Delete Location",
-          "At least one saved location must remain."
+          "At least one saved location must remain.",
         );
       } else {
         Alert.alert(
           "Location Not Deleted",
-          "This location no longer exists or could not be deleted."
+          "This location no longer exists or could not be deleted.",
         );
       }
-    } catch (err) {
+    } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : String(err);
 
@@ -205,7 +215,7 @@ function LocationsScreen() {
 
       Alert.alert(
         "Deletion Failed",
-        "The location could not be deleted. Please try again."
+        "The location could not be deleted. Please try again.",
       );
     } finally {
       deletionInProgress.current = false;
@@ -213,8 +223,10 @@ function LocationsScreen() {
     }
   }
 
-  function openLocation(location: Location) {
-    if (deletionInProgress.current) return;
+  function openLocation(location: Location): void {
+    if (deletionInProgress.current) {
+      return;
+    }
 
     navigation.navigate("LocationDetails", {
       location,
@@ -224,8 +236,11 @@ function LocationsScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator />
-        <Text>Loading locations…</Text>
+        <ActivityIndicator size="large" />
+
+        <Text style={styles.loadingText}>
+          Loading locations…
+        </Text>
       </View>
     );
   }
@@ -235,25 +250,31 @@ function LocationsScreen() {
       <View style={styles.header}>
         <Text style={styles.hint}>
           Swipe left to delete a location.
-         {"\n"}
-         At least one saved location must remain.
+          {"\n"}
+          At least one saved location must remain.
         </Text>
 
         {deleting && (
           <View style={styles.deletingInfo}>
             <ActivityIndicator size="small" />
-            <Text>Deleting location…</Text>
+
+            <Text style={styles.deletingText}>
+              Deleting location…
+            </Text>
           </View>
         )}
 
         {error && (
-          <Text style={styles.error}>
+          <Text
+            accessibilityRole="alert"
+            style={styles.error}
+          >
             Error: {error}
           </Text>
         )}
       </View>
 
-      <FlatList
+      <FlatList<Location>
         contentContainerStyle={styles.listContent}
         data={locations}
         keyExtractor={(item) => String(item.id)}
@@ -262,7 +283,9 @@ function LocationsScreen() {
           <View style={styles.separator} />
         )}
         ListEmptyComponent={
-          <Text>No saved locations found.</Text>
+          <Text style={styles.empty}>
+            No saved locations found.
+          </Text>
         }
         renderItem={({ item }) => (
           <LocationRow
@@ -295,73 +318,95 @@ export default function PreviousLocations() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#F8FAFC",
   },
   loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    backgroundColor: "#F8FAFC",
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: "#64748B",
   },
   header: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingTop: 20,
-    paddingBottom: 12,
-    gap: 12,
+    paddingBottom: 16,
   },
   hint: {
-    color: "#555",
+    color: "#64748B",
     lineHeight: 20,
   },
   deletingInfo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    marginTop: 12,
+  },
+  deletingText: {
+    marginLeft: 8,
+    color: "#64748B",
   },
   error: {
-    color: "red",
+    marginTop: 12,
+    color: "#B91C1C",
   },
   listContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 30,
+    paddingHorizontal: 16,
+    paddingBottom: 32,
+  },
+  empty: {
+    color: "#475569",
   },
   separator: {
-    height: 1,
-    backgroundColor: "#ddd",
+    height: 12,
+  },
+  swipeContainer: {
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
   },
   row: {
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    backgroundColor: "#fff",
+    padding: 16,
+    minHeight: 110,
+    backgroundColor: "#FFFFFF",
   },
   rowPressed: {
-    backgroundColor: "#f0f0f0",
+    backgroundColor: "#F1F5F9",
   },
   rowDisabled: {
     opacity: 0.6,
   },
   address: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "600",
+    color: "#0F172A",
   },
   city: {
-    marginTop: 4,
-    color: "#555",
+    marginTop: 6,
+    fontSize: 14,
+    color: "#475569",
   },
   latitude: {
-    marginTop: 8,
+    marginTop: 10,
+    fontSize: 12,
+    color: "#64748B",
   },
   longitude: {
     marginTop: 4,
+    fontSize: 12,
+    color: "#64748B",
   },
   deleteAction: {
     width: 110,
-    backgroundColor: "#c62828",
+    backgroundColor: "#B91C1C",
     justifyContent: "center",
     alignItems: "center",
   },
   deleteActionText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },

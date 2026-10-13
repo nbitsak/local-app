@@ -8,8 +8,33 @@ import {
   type ForecastResult,
 } from "../../services/xweatherForecast";
 
+const ΧWEATHER_CLIENT_ID = "hoJmFhaLyES3fAlD3O88s";
+const ΧWEATHER_CLIENT_SECRET = "Q5oQYsfWMCNloYzDYeObKvCYxHbjboIHddzwjcxU";
+
+
 function temperature(value: number | null): string {
   return value == null ? "—" : `${Math.round(value)}°C`;
+}
+
+function weatherIcon(
+  description: string | null | undefined,
+): string {
+  const weather = description?.toLowerCase() ?? "";
+
+  if (/thunder|lightning/.test(weather)) return "⛈️";
+  if (/sleet|hail|freezing rain|ice pellets/.test(weather)) return "🌨️";
+  if (/snow|flurr|blizzard/.test(weather)) return "❄️";
+  if (/rain|shower|drizzle/.test(weather)) return "🌧️";
+  if (/fog|mist|haze|smoke/.test(weather)) return "🌫️";
+  if (/mostly cloudy|overcast/.test(weather)) return "☁️";
+  if (/partly cloudy|partly sunny|mostly sunny|fair/.test(weather)) {
+    return "🌤️";
+  }
+  if (/cloud/.test(weather)) return "☁️";
+  if (/wind|breez|gust/.test(weather)) return "💨";
+  if (/sun|clear/.test(weather)) return "☀️";
+
+  return "🌡️";
 }
 
 export default function WeatherTab() {
@@ -35,8 +60,8 @@ export default function WeatherTab() {
           latitude: coordinate.latitude,
           longitude: coordinate.longitude,
           // Testing only: see the production note below.
-          clientId: "hoJmFhaLyES3fAlD3O88s",
-          clientSecret: "Q5oQYsfWMCNloYzDYeObKvCYxHbjboIHddzwjcxU",
+          clientId: ΧWEATHER_CLIENT_ID,
+          clientSecret: ΧWEATHER_CLIENT_SECRET,
           signal: controller.signal,
         });
 
@@ -106,7 +131,15 @@ export default function WeatherTab() {
 
       {forecast.today ? (
         <View style={styles.card}>
-          <Text>{forecast.today.weather ?? "Conditions unavailable"}</Text>
+          <View style={styles.weatherRow}>
+            <Text style={styles.weatherIcon}>
+              {weatherIcon(forecast.today.weather)}
+            </Text>
+
+            <Text style={styles.weatherText}>
+                {forecast.today.weather ?? "Conditions unavailable"}
+            </Text>
+          </View>
           <Text>
             High: {temperature(forecast.today.maxTempC)}
             {" · "}
@@ -132,7 +165,15 @@ export default function WeatherTab() {
               {" · "}
               {temperature(period.tempC)}
             </Text>
-            <Text>{period.weather ?? "—"}</Text>
+            <View style={styles.weatherRow}>
+              <Text style={styles.weatherIcon}>
+                {weatherIcon(period.weather)}
+              </Text>
+
+              <Text style={styles.weatherText}>
+                {period.weather ?? "—"}
+              </Text>
+</View>
             <Text>Precipitation chance: {period.pop ?? "—"}%</Text>
           </View>
         ))
@@ -147,7 +188,14 @@ export default function WeatherTab() {
           <Text style={styles.label}>
             {formatDay(period.dateTimeISO)}
           </Text>
-          <Text>{period.weather ?? "—"}</Text>
+          <View style={styles.weatherRow}>
+            <Text style={styles.weatherIcon}>
+              {weatherIcon(period.weather)}
+            </Text>
+            <Text style={styles.weatherText}>
+              {period.weather ?? "—"}
+            </Text>
+          </View>
           <Text>
             High: {temperature(period.maxTempC)}
             {" · "}
@@ -187,5 +235,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 6,
+  },
+  weatherRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  weatherIcon: {
+    fontSize: 30,
+    marginRight: 10,
+  },
+  weatherText: {
+    flex: 1,
+    fontSize: 15,
   },
 });

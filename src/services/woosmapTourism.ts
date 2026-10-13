@@ -34,7 +34,7 @@ type NearbyPage = {
 };
 
 const ENDPOINT = "https://api.woosmap.com/localities/nearby/";
-const RADIUS_METERS = 5000;
+const RADIUS_METERS = 2000;
 const PAGE_SIZE = 10;
 
 function isObject(

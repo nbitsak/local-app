@@ -13,6 +13,11 @@ export type RootStackParamList = {
   PreviousLocations: undefined;
   LocationScreen: { location: Location };
   LocationDetails: { location: Location };
+  Main: undefined;
+  Wikipedia: {
+    title: string;
+    url: string;
+  };
 };
 
 export type LocationTabsParamList = {

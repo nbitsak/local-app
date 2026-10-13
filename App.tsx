@@ -4,6 +4,7 @@ import type { RootStackParamList } from './src/navigation/types';
 import HomeScreen from './src/screens/HomeScreen';
 import PreviousLocations from './src/screens/PreviousLocations';
 import LocationDetailsScreen from './src/screens/LocationDetailsScreen';
+import WikipediaScreen from "./src/screens/WikipediaScreen";
 import { NavigationContainer, getFocusedRouteNameFromRoute } from "@react-navigation/native";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -29,6 +30,10 @@ const RootStack = createNativeStackNavigator({
     LocationDetails: {
       screen: LocationDetailsScreen,
       options: {title: 'Location Details'},
+    },
+    Wikipedia: {
+      screen: WikipediaScreen,
+      options: {title: 'Wikipedia'},
     },
   },
 });
