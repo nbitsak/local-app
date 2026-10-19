@@ -1,39 +1,53 @@
-import {createStaticNavigation} from '@react-navigation/native';
-import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import type { RootStackParamList } from './src/navigation/types';
-import HomeScreen from './src/screens/HomeScreen';
-import PreviousLocations from './src/screens/PreviousLocations';
-import LocationDetailsScreen from './src/screens/LocationDetailsScreen';
+import {
+  createStaticNavigation,
+  getFocusedRouteNameFromRoute,
+} from "@react-navigation/native";
+import {
+  createNativeStackNavigator,
+} from "@react-navigation/native-stack";
+
+import HomeScreen from "./src/screens/HomeScreen";
+import PreviousLocations from "./src/screens/PreviousLocations";
+import LocationDetailsScreen from "./src/screens/LocationDetailsScreen";
 import WikipediaScreen from "./src/screens/WikipediaScreen";
-import { NavigationContainer, getFocusedRouteNameFromRoute } from "@react-navigation/native";
-
-const Stack = createNativeStackNavigator<RootStackParamList>();
-
-<Stack.Screen
-  name="LocationDetails"
-  component={LocationDetailsScreen}
-  options={({ route }) => ({
-    headerTitle: getFocusedRouteNameFromRoute(route) ?? "Map",
-  })}
-/>
+import SelectedPlacesMapScreen from "./src/screens/SelectedPlacesMapScreen";
 
 const RootStack = createNativeStackNavigator({
   screens: {
     Home: {
       screen: HomeScreen,
-      options: {title: 'Localize'},
+      options: {
+        title: "Localize",
+      },
     },
+
     PreviousLocations: {
       screen: PreviousLocations,
-      options: {title: 'Locations'},
+      options: {
+        title: "Locations",
+      },
     },
+
     LocationDetails: {
       screen: LocationDetailsScreen,
-      options: {title: 'Location Details'},
+      options: ({ route }) => ({
+        headerTitle:
+          getFocusedRouteNameFromRoute(route) ?? "Map",
+      }),
     },
+
     Wikipedia: {
       screen: WikipediaScreen,
-      options: {title: 'Wikipedia'},
+      options: {
+        title: "Wikipedia",
+      },
+    },
+
+    SelectedPlacesMap: {
+      screen: SelectedPlacesMapScreen,
+      options: {
+        title: "Selected places",
+      },
     },
   },
 });

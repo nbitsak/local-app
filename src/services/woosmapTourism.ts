@@ -1,5 +1,3 @@
-// services/woosmapTourism.ts
-
 export type Coordinates = {
   latitude: number;
   longitude: number;
@@ -22,10 +20,17 @@ type SearchOptions = {
   // Supply an actual private key, not a public woos- key.
   apiKey: string;
   location: Coordinates;
-  signal?: AbortSignal;
 
-  // Enable temporarily to inspect API responses.
+  // Optional to preserve existing InfoTab calls.
+  // Defaults to ["tourism"].
+  types?: readonly string[];
+
+  signal?: AbortSignal;
   debug?: boolean;
+};
+
+type NearbySearchOptions = SearchOptions & {
+  types: readonly string[];
 };
 
 type NearbyPage = {
@@ -71,16 +76,23 @@ function validateLocation(location: Coordinates): void {
   }
 }
 
-function parsePlace(value: unknown, index: number): TourismPlace {
+function parsePlace(
+  value: unknown,
+  index: number,
+): TourismPlace {
   if (!isObject(value)) {
-    throw new Error(`Invalid Woosmap result at index ${index}.`);
+    throw new Error(
+      `Invalid Woosmap result at index ${index}.`,
+    );
   }
 
   if (
     typeof value.public_id !== "string" ||
     typeof value.name !== "string" ||
     !Array.isArray(value.types) ||
-    !value.types.every((type: unknown) => typeof type === "string")
+    !value.types.every(
+      (type: unknown) => typeof type === "string",
+    )
   ) {
     throw new Error(
       `Invalid Woosmap result at index ${index}: ` +
@@ -107,7 +119,9 @@ function parsePlace(value: unknown, index: number): TourismPlace {
     const point = value.geometry.location;
 
     if (point === null) {
-      place.geometry = { location: null };
+      place.geometry = {
+        location: null,
+      };
     } else if (
       isObject(point) &&
       typeof point.lat === "number" &&
@@ -133,13 +147,17 @@ function parsePlace(value: unknown, index: number): TourismPlace {
 
 function parseNearbyPage(value: unknown): NearbyPage {
   if (!isObject(value)) {
-    throw new Error("Woosmap returned a non-object JSON response.");
+    throw new Error(
+      "Woosmap returned a non-object JSON response.",
+    );
   }
 
   if (!Array.isArray(value.results)) {
     throw new Error(
       "Woosmap Nearby response is missing the results array. " +
-        `Received fields: ${Object.keys(value).join(", ") || "(none)"}.`,
+        `Received fields: ${
+          Object.keys(value).join(", ") || "(none)"
+        }.`,
     );
   }
 
@@ -150,19 +168,19 @@ function parseNearbyPage(value: unknown): NearbyPage {
     );
   }
 
-const rawNextPage = value.pagination.next_page;
+  const rawNextPage = value.pagination.next_page;
 
-// Compatibility fallback:
-// keep the received results, but stop pagination if the field is missing.
-if (rawNextPage === undefined) {
-  console.warn(
-    "Woosmap returned pagination without next_page. " +
-      "Returning the pages received so far; results may be incomplete.",
-    JSON.stringify(value.pagination, null, 2),
-  );
-}
+  // Keep received results, but stop pagination if next_page is missing.
+  if (rawNextPage === undefined) {
+    console.warn(
+      "Woosmap returned pagination without next_page. " +
+        "Returning the pages received so far; results may be incomplete.",
+      JSON.stringify(value.pagination, null, 2),
+    );
+  }
 
-const nextPage = rawNextPage ?? null;
+  const nextPage = rawNextPage ?? null;
+
   if (
     nextPage !== null &&
     !(
@@ -201,9 +219,12 @@ function getApiErrorMessage(
   return `Woosmap request failed (HTTP ${status}).`;
 }
 
+// Keep this export and its default behavior for InfoTab.
+// Despite its legacy name, the configured radius remains 2000 meters.
 export async function getTourismPlacesWithin5Km({
   apiKey,
   location,
+  types = ["tourism"],
   signal,
   debug = false,
 }: SearchOptions): Promise<TourismPlace[]> {
@@ -212,7 +233,21 @@ export async function getTourismPlacesWithin5Km({
   const privateKey = apiKey.trim();
 
   if (!privateKey) {
-    throw new Error("A Woosmap private API key is required.");
+    throw new Error(
+      "A Woosmap private API key is required.",
+    );
+  }
+
+  const selectedTypes = [
+    ...new Set(
+      types
+        .map((type) => type.trim())
+        .filter((type) => type.length > 0),
+    ),
+  ];
+
+  if (selectedTypes.length === 0) {
+    throw new Error("Select at least one place type.");
   }
 
   const places = new Map<string, TourismPlace>();
@@ -239,18 +274,21 @@ export async function getTourismPlacesWithin5Km({
       private_key: privateKey,
       location: `${location.latitude},${location.longitude}`,
       radius: String(RADIUS_METERS),
-      types: "tourism",
+      types: selectedTypes.join("|"),
       page: String(page),
       limit: String(PAGE_SIZE),
     });
 
-    const response = await fetch(`${ENDPOINT}?${query}`, {
-      method: "GET",
-      signal,
-      headers: {
-        Accept: "application/json",
+    const response = await fetch(
+      `${ENDPOINT}?${query}`,
+      {
+        method: "GET",
+        signal,
+        headers: {
+          Accept: "application/json",
+        },
       },
-    });
+    );
 
     const responseText = await response.text();
     let body: unknown;
@@ -259,7 +297,7 @@ export async function getTourismPlacesWithin5Km({
       body = JSON.parse(responseText);
     } catch {
       throw new Error(
-        `Woosmap returned non-JSON content ` +
+        "Woosmap returned non-JSON content " +
           `(HTTP ${response.status}).`,
       );
     }
@@ -273,7 +311,9 @@ export async function getTourismPlacesWithin5Km({
     }
 
     if (!response.ok) {
-      throw new Error(getApiErrorMessage(response.status, body));
+      throw new Error(
+        getApiErrorMessage(response.status, body),
+      );
     }
 
     const result = parseNearbyPage(body);
@@ -286,4 +326,11 @@ export async function getTourismPlacesWithin5Km({
   }
 
   return Array.from(places.values());
+}
+
+// General-purpose entry point used by NearbyTab.
+export function getNearbyPlaces(
+  options: NearbySearchOptions,
+): Promise<TourismPlace[]> {
+  return getTourismPlacesWithin5Km(options);
 }
