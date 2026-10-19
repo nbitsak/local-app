@@ -6,6 +6,10 @@ import {
   createNativeStackNavigator,
 } from "@react-navigation/native-stack";
 
+import {
+  SafeAreaProvider,
+} from "react-native-safe-area-context";
+
 import HomeScreen from "./src/screens/HomeScreen";
 import PreviousLocations from "./src/screens/PreviousLocations";
 import LocationDetailsScreen from "./src/screens/LocationDetailsScreen";
@@ -55,5 +59,9 @@ const RootStack = createNativeStackNavigator({
 const Navigation = createStaticNavigation(RootStack);
 
 export default function App() {
-  return <Navigation />;
+  return (
+    <SafeAreaProvider>
+      <Navigation />
+    </SafeAreaProvider>
+  );
 }

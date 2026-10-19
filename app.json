@@ -7,7 +7,8 @@
           "locationWhenInUsePermission": "We need your location to show your position in map."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-font"
     ],
     "name": "local-app",
     "slug": "local-app",

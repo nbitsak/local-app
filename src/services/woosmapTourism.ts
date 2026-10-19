@@ -172,12 +172,19 @@ function parseNearbyPage(value: unknown): NearbyPage {
 
   // Keep received results, but stop pagination if next_page is missing.
   if (rawNextPage === undefined) {
-    console.warn(
-      "Woosmap returned pagination without next_page. " +
-        "Returning the pages received so far; results may be incomplete.",
-      JSON.stringify(value.pagination, null, 2),
-    );
-  }
+  console.log(
+    "Woosmap pagination diagnostic:",
+    JSON.stringify(
+      {
+        resultsCount: value.results.length,
+        pagination: value.pagination,
+        responseFields: Object.keys(value),
+      },
+      null,
+      2,
+    ),
+  );
+}
 
   const nextPage = rawNextPage ?? null;
 

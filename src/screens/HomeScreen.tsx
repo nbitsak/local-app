@@ -2,18 +2,28 @@ import { useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  Image
 } from "react-native";
+
 import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type {
+  NativeStackNavigationProp,
+} from "@react-navigation/native-stack";
+
 import * as ExpoLocation from "expo-location";
 
-import type { RootStackParamList } from "../navigation/types";
+import {
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+
+import type {
+  RootStackParamList,
+} from "../navigation/types";
 
 import {
   saveLocationIfFarEnough,
@@ -27,7 +37,11 @@ type Coordinates = {
 
 export default function HomeScreen() {
   const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    useNavigation<
+      NativeStackNavigationProp<RootStackParamList>
+    >();
+
+  const insets = useSafeAreaInsets();
 
   const [coordinates, setCoordinates] =
     useState<Coordinates | null>(null);
@@ -37,7 +51,8 @@ export default function HomeScreen() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
+  const [warning, setWarning] =
+    useState<string | null>(null);
 
   const [canContinue, setCanContinue] = useState(false);
 
@@ -86,7 +101,7 @@ export default function HomeScreen() {
 
       if (!enabled) {
         setError(
-          "Please enable location services on your device."
+          "Please enable location services on your device.",
         );
         return;
       }
@@ -112,7 +127,7 @@ export default function HomeScreen() {
       try {
         const addresses =
           await ExpoLocation.reverseGeocodeAsync(
-            currentCoordinates
+            currentCoordinates,
           );
 
         address = addresses[0];
@@ -179,7 +194,7 @@ export default function HomeScreen() {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to retrieve or save the location."
+          : "Failed to retrieve or save the location.",
       );
     } finally {
       requestInProgress.current = false;
@@ -191,23 +206,37 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          {
+            // Preserve the original spacing and reserve
+            // additional room for the system navigation area.
+            paddingBottom: insets.bottom + 40,
+          },
+        ]}
       >
         {/* Display location details and Continue near the top. */}
         <View style={styles.details}>
           {loading && (
             <View style={styles.loadingInfo}>
               <ActivityIndicator />
-              <Text>Finding and checking your location…</Text>
+
+              <Text>
+                Finding and checking your location…
+              </Text>
             </View>
           )}
 
           {error && (
-            <Text style={styles.error}>{error}</Text>
+            <Text style={styles.error}>
+              {error}
+            </Text>
           )}
 
           {warning && (
-            <Text style={styles.warning}>{warning}</Text>
+            <Text style={styles.warning}>
+              {warning}
+            </Text>
           )}
 
           {coordinates && (
@@ -224,7 +253,9 @@ export default function HomeScreen() {
                 The new location was saved.
               </Text>
 
-              <Text>ID: {saveResult.location.id}</Text>
+              <Text>
+                ID: {saveResult.location.id}
+              </Text>
 
               <Text>
                 {saveResult.location.real_location}
@@ -274,14 +305,17 @@ export default function HomeScreen() {
         {/* Keep the main buttons at the bottom. */}
         <View style={styles.buttons}>
           <Image
-              source={require("../../assets/prisma_logo.webp")}
-              style={styles.homeImage}
-               resizeMode="contain"
-               accessibilityLabel="Home illustration"
-            />
+            source={require("../../assets/prisma_logo.webp")}
+            style={styles.homeImage}
+            resizeMode="contain"
+            accessibilityLabel="Home illustration"
+          />
+
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ disabled: loading }}
+            accessibilityState={{
+              disabled: loading,
+            }}
             disabled={loading}
             onPress={() =>
               navigation.navigate("PreviousLocations")

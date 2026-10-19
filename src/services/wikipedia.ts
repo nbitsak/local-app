@@ -1,6 +1,17 @@
 // services/wikipedia.ts
 
-const WIKIPEDIA_LANGUAGES = ["el", "en", "fr", "it"] as const;
+import { Platform } from "react-native";
+
+// Replace the placeholder with a real contact email address.
+const WIKIPEDIA_USER_AGENT =
+  "LocalApp/1.0 (mailto:nbitsakidis@gmail.com)";
+
+const WIKIPEDIA_LANGUAGES = [
+  "el",
+  "en",
+  "fr",
+  "it",
+] as const;
 
 export type WikipediaLanguage =
   (typeof WIKIPEDIA_LANGUAGES)[number];
@@ -43,19 +54,39 @@ function normalizeTitle(value: string): string {
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
-    const error = new Error("Wikipedia request cancelled.");
+    const error = new Error(
+      "Wikipedia request cancelled.",
+    );
+
     error.name = "AbortError";
     throw error;
   }
 }
 
-function encodeQuery(params: Record<string, string>): string {
+function encodeQuery(
+  params: Record<string, string>,
+): string {
   return Object.entries(params)
     .map(
       ([key, value]) =>
         `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
     )
     .join("&");
+}
+
+function getRequestHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+
+  if (Platform.OS === "web") {
+    // Browsers control their own User-Agent header.
+    headers["Api-User-Agent"] = WIKIPEDIA_USER_AGENT;
+  } else {
+    headers["User-Agent"] = WIKIPEDIA_USER_AGENT;
+  }
+
+  return headers;
 }
 
 async function getExactArticle(
@@ -72,6 +103,7 @@ async function getExactArticle(
     format: "json",
     formatversion: "2",
     origin: "*",
+
     // Do not follow redirects to another article.
   });
 
@@ -80,9 +112,7 @@ async function getExactArticle(
     {
       method: "GET",
       signal,
-      headers: {
-        Accept: "application/json",
-      },
+      headers: getRequestHeaders(),
     },
   );
 
@@ -123,9 +153,11 @@ async function getExactArticle(
   if (data.error) {
     throw new Error(
       `Wikipedia (${language}): ` +
-        (data.error.info ??
+        (
+          data.error.info ??
           data.error.code ??
-          "Unknown API error"),
+          "Unknown API error"
+        ),
     );
   }
 
@@ -151,7 +183,9 @@ async function getExactArticle(
 
   // Ignore only capitalization and whitespace differences.
   // Accents, punctuation and additional words must match.
-  if (normalizeTitle(page.title) !== normalizeTitle(name)) {
+  if (
+    normalizeTitle(page.title) !== normalizeTitle(name)
+  ) {
     return null;
   }
 
@@ -160,7 +194,9 @@ async function getExactArticle(
     language,
     url:
       `https://${language}.wikipedia.org/wiki/` +
-      encodeURIComponent(page.title.replace(/ /g, "_")),
+      encodeURIComponent(
+        page.title.replace(/ /g, "_"),
+      ),
   };
 }
 
@@ -190,6 +226,7 @@ export async function findWikipediaArticle(
       );
 
       throwIfAborted(signal);
+
       completedChecks++;
 
       if (article) {
@@ -199,7 +236,15 @@ export async function findWikipediaArticle(
       throwIfAborted(signal);
 
       const message =
-        err instanceof Error ? err.message : String(err);
+        err instanceof Error
+          ? err.message
+          : String(err);
+
+      console.warn("Wikipedia request failed:", {
+        title,
+        language,
+        message,
+      });
 
       failures.push(message);
     }
