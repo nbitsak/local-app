@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import {
   ActivityIndicator,
   Pressable,
@@ -8,17 +13,27 @@ import {
   View,
 } from "react-native";
 
-import { useNavigation } from "@react-navigation/native";
+import {
+  useNavigation,
+} from "@react-navigation/native";
+
 import type {
   NativeStackNavigationProp,
 } from "@react-navigation/native-stack";
 
-import { useSelectedLocation } from "../SelectedLocationContext";
+import {
+  useSelectedLocation,
+} from "../SelectedLocationContext";
 
 import {
   getNearbyPlaces,
   type TourismPlace,
 } from "../../services/woosmapTourism";
+
+import {
+  loadNearbySelection,
+  saveNearbySelection,
+} from "../../services/nearbyDatabase";
 
 import type {
   RootStackParamList,
@@ -149,6 +164,35 @@ function toMapPlace(
   };
 }
 
+function getNearbyErrorMessage(
+  cause: unknown,
+): string {
+  const technicalMessage =
+    cause instanceof Error
+      ? cause.message
+      : String(cause);
+
+  const isConnectionError =
+    /offline|network|internet|failed to fetch|fetch failed|connection|timed?\s*out|timeout|unable to resolve host/i.test(
+      technicalMessage,
+    );
+
+  if (isConnectionError) {
+    return (
+      "We couldn't connect to search for nearby places. " +
+      "Check your internet connection and try again. " +
+      "Any places you have saved are still available " +
+      "in Selected places."
+    );
+  }
+
+  return (
+    "We couldn't load nearby places right now. " +
+    "Please try again later. " +
+    "Any places you have saved are still available."
+  );
+}
+
 export default function NearbyTab() {
   const navigation = useNavigation<Navigation>();
   const location = useSelectedLocation();
@@ -157,35 +201,84 @@ export default function NearbyTab() {
   const rawLongitude = location?.longitude;
 
   const latitude =
-    rawLatitude == null || String(rawLatitude).trim() === ""
+    rawLatitude == null ||
+    String(rawLatitude).trim() === ""
       ? NaN
       : Number(rawLatitude);
 
   const longitude =
-    rawLongitude == null || String(rawLongitude).trim() === ""
+    rawLongitude == null ||
+    String(rawLongitude).trim() === ""
       ? NaN
       : Number(rawLongitude);
 
-  const validStartingLocation =
-    isValidCoordinates(latitude, longitude);
+  const validStartingLocation = isValidCoordinates(
+    latitude,
+    longitude,
+  );
+
+  const originId = `starting:${location.id}`;
+
+  const locationKey =
+    `${originId}:${latitude}:${longitude}`;
+
+  const activeLocationKeyRef = useRef(locationKey);
+  activeLocationKeyRef.current = locationKey;
 
   const [selectedCategory, setSelectedCategory] =
     useState<NearbyCategory | null>(null);
 
-  const [selectedSubcategories, setSelectedSubcategories] =
-    useState<AvailableType[]>([]);
+  const [
+    selectedSubcategories,
+    setSelectedSubcategories,
+  ] = useState<AvailableType[]>([]);
 
-  const [places, setPlaces] = useState<TourismPlace[]>([]);
+  const [places, setPlaces] =
+    useState<TourismPlace[]>([]);
+
   const [selectedPlaces, setSelectedPlaces] =
     useState<SelectedMapPlace[]>([]);
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hasSearched, setHasSearched] = useState(false);
 
-  const requestRef = useRef<AbortController | null>(null);
+  const [error, setError] =
+    useState<string | null>(null);
 
-  const allSelected = selectedSubcategories.length === 0;
+  const [hasSearched, setHasSearched] =
+    useState(false);
+
+  const [
+    loadingSavedPlaces,
+    setLoadingSavedPlaces,
+  ] = useState(true);
+
+  const [savingPlaces, setSavingPlaces] =
+    useState(false);
+
+  const [storageMessage, setStorageMessage] =
+    useState<string | null>(null);
+
+  const [storageError, setStorageError] =
+    useState<string | null>(null);
+
+  const [
+    restoredLocationKey,
+    setRestoredLocationKey,
+  ] = useState<string | null>(null);
+
+  const [restoreAttempt, setRestoreAttempt] =
+    useState(0);
+
+  const requestRef =
+    useRef<AbortController | null>(null);
+
+  // Block repeated save presses before state updates.
+  const saveInProgressRef = useRef(false);
+
+  const mountedRef = useRef(true);
+
+  const allSelected =
+    selectedSubcategories.length === 0;
 
   const subcategories = selectedCategory
     ? availableTypes.filter((type) =>
@@ -194,20 +287,80 @@ export default function NearbyTab() {
     : [];
 
   const startingPlace: SelectedMapPlace = {
-    id: `starting:${location.id}`,
+    id: originId,
     name: location.real_location,
     latitude,
     longitude,
     isStartingLocation: true,
   };
 
-  // A different starting location begins a new selection.
-  useEffect(() => {
-    setSelectedPlaces([]);
-  }, [location.id, latitude, longitude]);
+  const selectionReady =
+    !loadingSavedPlaces &&
+    restoredLocationKey === locationKey;
 
-  // Search results reset when filters change.
-  // Selected destinations remain untouched.
+  const selectionLocked =
+    !selectionReady || savingPlaces;
+
+  const canSave =
+    validStartingLocation &&
+    selectionReady &&
+    !savingPlaces;
+
+  const canShowMap =
+    validStartingLocation &&
+    selectionReady;
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Restore saved destinations when the starting location changes.
+  useEffect(() => {
+    let cancelled = false;
+
+    setSelectedPlaces([]);
+    setLoadingSavedPlaces(true);
+    setRestoredLocationKey(null);
+    setStorageMessage(null);
+    setStorageError(null);
+
+    async function restoreSelection(): Promise<void> {
+      try {
+        const savedPlaces =
+          await loadNearbySelection(originId);
+
+        if (cancelled) return;
+
+        setSelectedPlaces(savedPlaces);
+        setRestoredLocationKey(locationKey);
+      } catch (cause) {
+        if (cancelled) return;
+
+        setStorageError(
+          cause instanceof Error
+            ? cause.message
+            : "Unable to load saved places.",
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingSavedPlaces(false);
+        }
+      }
+    }
+
+    void restoreSelection();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [originId, locationKey, restoreAttempt]);
+
+  // Reset only search results when filters or location change.
+  // Selected destinations remain independent of the online search.
   useEffect(() => {
     requestRef.current?.abort();
     requestRef.current = null;
@@ -221,15 +374,17 @@ export default function NearbyTab() {
       requestRef.current?.abort();
     };
   }, [
-    location.id,
+    locationKey,
     selectedCategory,
     selectedSubcategories,
-    latitude,
-    longitude,
   ]);
 
-  function selectCategory(category: NearbyCategory) {
+  function selectCategory(
+    category: NearbyCategory,
+  ) {
     setSelectedCategory(category);
+
+    // Default to All for the newly selected category.
     setSelectedSubcategories([]);
   }
 
@@ -242,43 +397,149 @@ export default function NearbyTab() {
   ) {
     setSelectedSubcategories((current) =>
       current.includes(subcategory)
-        ? current.filter((item) => item !== subcategory)
+        ? current.filter(
+            (item) => item !== subcategory,
+          )
         : [...current, subcategory],
     );
   }
 
+  function clearStorageFeedback() {
+    setStorageMessage(null);
+    setStorageError(null);
+  }
+
   function togglePlace(place: TourismPlace) {
+    if (
+      selectionLocked ||
+      saveInProgressRef.current
+    ) {
+      return;
+    }
+
     const mapPlace = toMapPlace(place);
 
     if (!mapPlace) return;
 
+    clearStorageFeedback();
+
     setSelectedPlaces((current) =>
-      current.some((item) => item.id === mapPlace.id)
-        ? current.filter((item) => item.id !== mapPlace.id)
+      current.some(
+        (item) => item.id === mapPlace.id,
+      )
+        ? current.filter(
+            (item) => item.id !== mapPlace.id,
+          )
         : [...current, mapPlace],
     );
   }
 
   function removePlace(id: string) {
+    if (
+      selectionLocked ||
+      saveInProgressRef.current
+    ) {
+      return;
+    }
+
+    clearStorageFeedback();
+
     setSelectedPlaces((current) =>
       current.filter((place) => place.id !== id),
     );
   }
 
+  function retryRestore() {
+    if (
+      loadingSavedPlaces ||
+      saveInProgressRef.current
+    ) {
+      return;
+    }
+
+    setRestoreAttempt((current) => current + 1);
+  }
+
+  async function handleSaveSelectedPlaces():
+    Promise<void> {
+    if (
+      !canSave ||
+      saveInProgressRef.current
+    ) {
+      return;
+    }
+
+    saveInProgressRef.current = true;
+
+    const savingLocationKey = locationKey;
+
+    setSavingPlaces(true);
+    clearStorageFeedback();
+
+    try {
+      await saveNearbySelection(
+        startingPlace,
+        selectedPlaces,
+      );
+
+      if (
+        !mountedRef.current ||
+        activeLocationKeyRef.current !==
+          savingLocationKey
+      ) {
+        return;
+      }
+
+      setStorageMessage("Selected places saved.");
+    } catch (cause) {
+      if (
+        !mountedRef.current ||
+        activeLocationKeyRef.current !==
+          savingLocationKey
+      ) {
+        return;
+      }
+
+      setStorageError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to save selected places.",
+      );
+    } finally {
+      saveInProgressRef.current = false;
+
+      if (mountedRef.current) {
+        setSavingPlaces(false);
+      }
+    }
+  }
+
   function showOnMap() {
-    if (!validStartingLocation) return;
+    if (!canShowMap) return;
 
     navigation.navigate("SelectedPlacesMap", {
-      places: [startingPlace, ...selectedPlaces],
+      places: [
+        startingPlace,
+        ...selectedPlaces,
+      ],
     });
   }
 
   async function handleContinue(): Promise<void> {
     if (!selectedCategory) return;
 
-    const selectedTypes: AvailableType[] = allSelected
-      ? [selectedCategory]
-      : [...selectedSubcategories];
+    if (!validStartingLocation) {
+      setError(
+        "This location does not have valid coordinates. " +
+        "Please select another starting location.",
+      );
+      return;
+    }
+
+    const selectedTypes: AvailableType[] =
+      allSelected
+        ? [selectedCategory]
+        : [...selectedSubcategories];
 
     requestRef.current?.abort();
 
@@ -308,15 +569,25 @@ export default function NearbyTab() {
     } catch (cause) {
       if (controller.signal.aborted) return;
 
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to load nearby places. Please try again.",
-      );
+      // Show a friendly message instead of the raw API error.
+      setError(getNearbyErrorMessage(cause));
+
+      // Keep technical details in development logs only.
+      if (__DEV__) {
+        console.log(
+          "Nearby request diagnostic:",
+          cause instanceof Error
+            ? cause.message
+            : String(cause),
+        );
+      }
     } finally {
       if (requestRef.current === controller) {
         requestRef.current = null;
-        setLoading(false);
+
+        if (mountedRef.current) {
+          setLoading(false);
+        }
       }
     }
   }
@@ -331,7 +602,12 @@ export default function NearbyTab() {
           Selected places
         </Text>
 
-        <View style={[styles.placeCard, styles.startingCard]}>
+        <View
+          style={[
+            styles.placeCard,
+            styles.startingCard,
+          ]}
+        >
           <Text style={styles.placeName}>
             {startingPlace.name}
           </Text>
@@ -342,63 +618,164 @@ export default function NearbyTab() {
 
           {!validStartingLocation && (
             <Text style={styles.errorText}>
-              This location does not have valid coordinates.
+              This location does not have valid
+              coordinates.
             </Text>
           )}
         </View>
 
-        {selectedPlaces.map((place) => (
-          <View key={place.id} style={styles.selectedPlaceCard}>
-            <View style={styles.selectedPlaceContent}>
-              <Text style={styles.placeName}>
-                {place.name}
-              </Text>
+        {loadingSavedPlaces && (
+          <View style={styles.storageLoading}>
+            <ActivityIndicator
+              size="small"
+              color="#2563eb"
+            />
 
-              {place.formatted_address ? (
-                <Text style={styles.placeAddress}>
-                  {place.formatted_address}
+            <Text style={styles.storageLoadingText}>
+              Loading saved places…
+            </Text>
+          </View>
+        )}
+
+        {selectionReady &&
+          selectedPlaces.map((place) => (
+            <View
+              key={place.id}
+              style={styles.selectedPlaceCard}
+            >
+              <View
+                style={styles.selectedPlaceContent}
+              >
+                <Text style={styles.placeName}>
+                  {place.name}
                 </Text>
-              ) : null}
-            </View>
 
+                {place.formatted_address ? (
+                  <Text
+                    style={styles.placeAddress}
+                  >
+                    {place.formatted_address}
+                  </Text>
+                ) : null}
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  `Remove ${place.name}`
+                }
+                accessibilityState={{
+                  disabled: selectionLocked,
+                }}
+                disabled={selectionLocked}
+                onPress={() =>
+                  removePlace(place.id)
+                }
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.removeButton,
+                  selectionLocked &&
+                    styles.disabledButton,
+                  pressed &&
+                    styles.categoryTagPressed,
+                ]}
+              >
+                <Text
+                  style={styles.removeButtonText}
+                >
+                  ×
+                </Text>
+              </Pressable>
+            </View>
+          ))}
+
+        {selectionReady &&
+          selectedPlaces.length === 0 && (
+            <Text style={styles.nearbyHint}>
+              Tap a nearby place below to add it here.
+            </Text>
+          )}
+
+        {storageError && (
+          <Text
+            accessibilityRole="alert"
+            style={styles.storageError}
+          >
+            {storageError}
+          </Text>
+        )}
+
+        {!loadingSavedPlaces &&
+          !selectionReady && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Remove ${place.name}`}
-              onPress={() => removePlace(place.id)}
-              hitSlop={8}
+              onPress={retryRestore}
               style={({ pressed }) => [
-                styles.removeButton,
-                pressed && styles.categoryTagPressed,
+                styles.retryButton,
+                pressed &&
+                  styles.categoryTagPressed,
               ]}
             >
-              <Text style={styles.removeButtonText}>×</Text>
+              <Text style={styles.retryButtonText}>
+                Retry loading saved places
+              </Text>
             </Pressable>
-          </View>
-        ))}
+          )}
 
-        {selectedPlaces.length === 0 && (
-          <Text style={styles.nearbyHint}>
-            Tap a nearby place below to add it here.
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{
+            disabled: !canSave,
+            busy: savingPlaces,
+          }}
+          disabled={!canSave}
+          onPress={() =>
+            void handleSaveSelectedPlaces()
+          }
+          style={({ pressed }) => [
+            styles.saveButton,
+            !canSave && styles.disabledButton,
+            pressed &&
+              styles.categoryTagPressed,
+          ]}
+        >
+          <Text style={styles.buttonText}>
+            {savingPlaces
+              ? "Saving..."
+              : "Save selected places"}
+          </Text>
+        </Pressable>
+
+        {storageMessage && (
+          <Text style={styles.storageSuccess}>
+            {storageMessage}
           </Text>
         )}
 
         <Pressable
           accessibilityRole="button"
           accessibilityState={{
-            disabled: !validStartingLocation,
+            disabled: !canShowMap,
           }}
-          disabled={!validStartingLocation}
+          disabled={!canShowMap}
           onPress={showOnMap}
           style={({ pressed }) => [
             styles.mapButton,
-            !validStartingLocation && styles.disabledButton,
-            pressed && styles.categoryTagPressed,
+            !canShowMap &&
+              styles.disabledButton,
+            pressed &&
+              styles.categoryTagPressed,
           ]}
         >
           <Text style={styles.buttonText}>
             Show on The Map
           </Text>
         </Pressable>
+
+        <Text style={styles.saveHint}>
+          Changes are stored only when you press
+          Save selected places.
+        </Text>
       </View>
 
       <Text style={styles.nearbyTitle}>
@@ -411,24 +788,30 @@ export default function NearbyTab() {
 
       <View style={styles.tagsContainer}>
         {nearbyCategories.map((category) => {
-          const selected = selectedCategory === category;
+          const selected =
+            selectedCategory === category;
 
           return (
             <Pressable
               key={category}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              onPress={() => selectCategory(category)}
+              onPress={() =>
+                selectCategory(category)
+              }
               style={({ pressed }) => [
                 styles.categoryTag,
-                selected && styles.categoryTagSelected,
-                pressed && styles.categoryTagPressed,
+                selected &&
+                  styles.categoryTagSelected,
+                pressed &&
+                  styles.categoryTagPressed,
               ]}
             >
               <Text
                 style={[
                   styles.categoryTagText,
-                  selected && styles.categoryTagTextSelected,
+                  selected &&
+                    styles.categoryTagTextSelected,
                 ]}
               >
                 {category}
@@ -453,18 +836,23 @@ export default function NearbyTab() {
           <View style={styles.tagsContainer}>
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ selected: allSelected }}
+              accessibilityState={{
+                selected: allSelected,
+              }}
               onPress={selectAll}
               style={({ pressed }) => [
                 styles.categoryTag,
-                allSelected && styles.categoryTagSelected,
-                pressed && styles.categoryTagPressed,
+                allSelected &&
+                  styles.categoryTagSelected,
+                pressed &&
+                  styles.categoryTagPressed,
               ]}
             >
               <Text
                 style={[
                   styles.categoryTagText,
-                  allSelected && styles.categoryTagTextSelected,
+                  allSelected &&
+                    styles.categoryTagTextSelected,
                 ]}
               >
                 All
@@ -473,7 +861,9 @@ export default function NearbyTab() {
 
             {subcategories.map((subcategory) => {
               const selected =
-                selectedSubcategories.includes(subcategory);
+                selectedSubcategories.includes(
+                  subcategory,
+                );
 
               const label = subcategory.slice(
                 selectedCategory.length + 1,
@@ -490,14 +880,17 @@ export default function NearbyTab() {
                   }
                   style={({ pressed }) => [
                     styles.categoryTag,
-                    selected && styles.categoryTagSelected,
-                    pressed && styles.categoryTagPressed,
+                    selected &&
+                      styles.categoryTagSelected,
+                    pressed &&
+                      styles.categoryTagPressed,
                   ]}
                 >
                   <Text
                     style={[
                       styles.categoryTagText,
-                      selected && styles.categoryTagTextSelected,
+                      selected &&
+                        styles.categoryTagTextSelected,
                     ]}
                   >
                     {label}
@@ -509,17 +902,24 @@ export default function NearbyTab() {
 
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ disabled: loading }}
+            accessibilityState={{
+              disabled: loading,
+              busy: loading,
+            }}
             disabled={loading}
             onPress={() => void handleContinue()}
             style={({ pressed }) => [
               styles.nearbyContinueButton,
-              loading && styles.disabledButton,
-              pressed && styles.categoryTagPressed,
+              loading &&
+                styles.disabledButton,
+              pressed &&
+                styles.categoryTagPressed,
             ]}
           >
             <Text style={styles.buttonText}>
-              {loading ? "Searching..." : "Continue"}
+              {loading
+                ? "Searching..."
+                : "Continue"}
             </Text>
           </Pressable>
 
@@ -537,12 +937,54 @@ export default function NearbyTab() {
           )}
 
           {error && (
-            <Text
+            <View
               accessibilityRole="alert"
-              style={styles.errorText}
+              style={styles.nearbyNotice}
             >
-              {error}
-            </Text>
+              <Text
+                style={styles.nearbyNoticeTitle}
+              >
+                Nearby search unavailable
+              </Text>
+
+              <Text
+                style={styles.nearbyNoticeText}
+              >
+                {error}
+              </Text>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{
+                  disabled:
+                    loading ||
+                    !validStartingLocation,
+                }}
+                disabled={
+                  loading ||
+                  !validStartingLocation
+                }
+                onPress={() =>
+                  void handleContinue()
+                }
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  styles.noticeRetryButton,
+                  (
+                    loading ||
+                    !validStartingLocation
+                  ) && styles.disabledButton,
+                  pressed &&
+                    styles.categoryTagPressed,
+                ]}
+              >
+                <Text
+                  style={styles.retryButtonText}
+                >
+                  Try again
+                </Text>
+              </Pressable>
+            </View>
           )}
 
           {hasSearched && (
@@ -555,19 +997,48 @@ export default function NearbyTab() {
 
               {places.length === 0 && (
                 <Text style={styles.nearbyHint}>
-                  No places were found for your selected
-                  categories within 2 km.
+                  No places were found for your
+                  selected categories within 2 km.
                 </Text>
               )}
 
               {places.map((place) => {
                 const mapPlace = toMapPlace(place);
-                const selectable = mapPlace !== null;
 
-                const selected = selectedPlaces.some(
-                  (item) =>
-                    item.id === `place:${place.public_id}`,
-                );
+                const hasCoordinates =
+                  mapPlace !== null;
+
+                const selected =
+                  selectionReady &&
+                  selectedPlaces.some(
+                    (item) =>
+                      item.id ===
+                      `place:${place.public_id}`,
+                  );
+
+                const disabled =
+                  !hasCoordinates ||
+                  selectionLocked;
+
+                let selectionHint =
+                  "Tap to add to Selected places.";
+
+                if (!hasCoordinates) {
+                  selectionHint =
+                    "Coordinates unavailable — cannot add to map.";
+                } else if (loadingSavedPlaces) {
+                  selectionHint =
+                    "Please wait while saved places load.";
+                } else if (!selectionReady) {
+                  selectionHint =
+                    "Load saved places before changing the selection.";
+                } else if (savingPlaces) {
+                  selectionHint =
+                    "Saving your selection…";
+                } else if (selected) {
+                  selectionHint =
+                    "Tap to remove from Selected places.";
+                }
 
                 return (
                   <Pressable
@@ -578,18 +1049,25 @@ export default function NearbyTab() {
                     }
                     accessibilityState={{
                       selected,
-                      disabled: !selectable,
+                      disabled,
                     }}
-                    disabled={!selectable}
-                    onPress={() => togglePlace(place)}
+                    disabled={disabled}
+                    onPress={() =>
+                      togglePlace(place)
+                    }
                     style={({ pressed }) => [
                       styles.placeCard,
-                      selected && styles.selectedResultCard,
-                      !selectable && styles.unavailableCard,
-                      pressed && styles.categoryTagPressed,
+                      selected &&
+                        styles.selectedResultCard,
+                      disabled &&
+                        styles.unavailableCard,
+                      pressed &&
+                        styles.categoryTagPressed,
                     ]}
                   >
-                    <View style={styles.resultNameRow}>
+                    <View
+                      style={styles.resultNameRow}
+                    >
                       <Text
                         style={[
                           styles.placeName,
@@ -600,14 +1078,18 @@ export default function NearbyTab() {
                       </Text>
 
                       {selected && (
-                        <Text style={styles.selectedBadge}>
+                        <Text
+                          style={styles.selectedBadge}
+                        >
                           ✓ Selected
                         </Text>
                       )}
                     </View>
 
                     {place.formatted_address ? (
-                      <Text style={styles.placeAddress}>
+                      <Text
+                        style={styles.placeAddress}
+                      >
                         {place.formatted_address}
                       </Text>
                     ) : null}
@@ -615,17 +1097,17 @@ export default function NearbyTab() {
                     <Text style={styles.placeTypes}>
                       {place.types
                         .filter(
-                          (type) => type !== "point_of_interest",
+                          (type) =>
+                            type !==
+                            "point_of_interest",
                         )
                         .join(", ")}
                     </Text>
 
-                    <Text style={styles.selectionHint}>
-                      {!selectable
-                        ? "Coordinates unavailable — cannot add to map."
-                        : selected
-                          ? "Tap to remove from Selected places."
-                          : "Tap to add to Selected places."}
+                    <Text
+                      style={styles.selectionHint}
+                    >
+                      {selectionHint}
                     </Text>
                   </Pressable>
                 );
@@ -717,8 +1199,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563eb",
     alignItems: "center",
   },
-  mapButton: {
+  saveButton: {
     marginTop: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+  },
+  mapButton: {
+    marginTop: 10,
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 10,
@@ -741,6 +1231,70 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: "#6b7280",
+  },
+  storageLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  storageLoadingText: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 14,
+    color: "#6b7280",
+  },
+  storageSuccess: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#15803d",
+  },
+  storageError: {
+    marginBottom: 12,
+    fontSize: 14,
+    color: "#b91c1c",
+  },
+  saveHint: {
+    marginTop: 12,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748b",
+  },
+  retryButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 10,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1d4ed8",
+  },
+  nearbyNotice: {
+    padding: 16,
+    marginTop: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#f1f5f9",
+  },
+  nearbyNoticeTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#334155",
+    marginBottom: 6,
+  },
+  nearbyNoticeText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#475569",
+  },
+  noticeRetryButton: {
+    marginTop: 14,
+    marginBottom: 0,
   },
   errorText: {
     marginTop: 16,
