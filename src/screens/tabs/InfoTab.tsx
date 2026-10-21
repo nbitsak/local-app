@@ -1,4 +1,10 @@
-import React, { useEffect, useState } from "react";
+// src/screens/tabs/InfoTab.tsx
+
+import {
+  useEffect,
+  useState,
+} from "react";
+
 import {
   ActivityIndicator,
   FlatList,
@@ -11,53 +17,49 @@ import {
 
 import * as ExpoLocation from "expo-location";
 
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from
-  "@react-navigation/native-stack";
+import {
+  useNavigation,
+} from "@react-navigation/native";
+
+import type {
+  NativeStackNavigationProp,
+} from "@react-navigation/native-stack";
 
 import {
   getTourismPlacesWithin5Km,
-} from "../../services/woosmapTourism";
-import type {
-  TourismPlace,
+  type TourismPlace,
 } from "../../services/woosmapTourism";
 
 import {
   findWikipediaArticle,
+  type WikipediaArticle,
 } from "../../services/wikipedia";
+
+import {
+  loadInfoSnapshot,
+  saveInfoSnapshot,
+  type CityInfo,
+  type CityStatus,
+  type InfoSnapshot,
+  type PlaceWithWikipedia,
+} from "../../services/infoDatabase";
+
 import type {
-  WikipediaArticle,
-} from "../../services/wikipedia";
+  RootStackParamList,
+} from "../../navigation/types";
 
-import type { RootStackParamList } from "../../navigation/types";
-import { useSelectedLocation } from "../SelectedLocationContext";
+import {
+  useSelectedLocation,
+} from "../SelectedLocationContext";
 
-type PlaceWithWikipedia = TourismPlace & {
-  wikipedia: WikipediaArticle | null;
-  wikiStatus: "loading" | "found" | "not-found" | "error";
-};
-
-type CityInfo = {
-  name: string;
-  country: string | null;
-  wikipedia: WikipediaArticle | null;
-};
-
-type CityStatus =
-  | "loading"
-  | "found"
-  | "not-found"
-  | "wiki-error"
-  | "permission-denied"
-  | "unsupported"
-  | "error";
-
-type Navigation = NativeStackNavigationProp<RootStackParamList>;
+type Navigation =
+  NativeStackNavigationProp<RootStackParamList>;
 
 const WOOSMAP_API_KEY = "789357b7-df18-41af-b04d-290c988618b5";
+
 const WIKIPEDIA_CONCURRENCY = 3;
 
-const WIKIPEDIA_LANGUAGE_LABELS: Record<
+const LANGUAGE_LABELS: Record<
   WikipediaArticle["language"],
   string
 > = {
@@ -81,284 +83,543 @@ function isValidLocation(
   );
 }
 
+function formatDate(value: string): string {
+  return new Date(value).toLocaleString("en-GB");
+}
+
 export default function InfoTab() {
   const navigation = useNavigation<Navigation>();
   const location = useSelectedLocation();
 
-  const rawLatitude = location?.latitude;
-  const rawLongitude = location?.longitude;
-
   const latitude =
-    rawLatitude == null || String(rawLatitude).trim() === ""
+    location.latitude == null ||
+    String(location.latitude).trim() === ""
       ? NaN
-      : Number(rawLatitude);
+      : Number(location.latitude);
 
   const longitude =
-    rawLongitude == null || String(rawLongitude).trim() === ""
+    location.longitude == null ||
+    String(location.longitude).trim() === ""
       ? NaN
-      : Number(rawLongitude);
+      : Number(location.longitude);
 
-  const [places, setPlaces] = useState<PlaceWithWikipedia[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [places, setPlaces] =
+    useState<PlaceWithWikipedia[]>([]);
 
-  const [cityInfo, setCityInfo] = useState<CityInfo | null>(null);
+  const [cityInfo, setCityInfo] =
+    useState<CityInfo | null>(null);
+
   const [cityStatus, setCityStatus] =
     useState<CityStatus>("loading");
 
-  // Identify the city independently of the attractions request.
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [notice, setNotice] =
+    useState<string | null>(null);
+
+  const [placesUpdatedAt, setPlacesUpdatedAt] =
+    useState<string | null>(null);
+
+  const [cityUpdatedAt, setCityUpdatedAt] =
+    useState<string | null>(null);
+
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
     const controller = new AbortController();
+    const signal = controller.signal;
 
+    setLoading(true);
+    setRefreshing(false);
+    setPlaces([]);
     setCityInfo(null);
-
-    if (!isValidLocation(latitude, longitude)) {
-      setCityStatus("not-found");
-      return () => controller.abort();
-    }
-
-    if (Platform.OS !== "android" && Platform.OS !== "ios") {
-      setCityStatus("unsupported");
-      return () => controller.abort();
-    }
-
     setCityStatus("loading");
+    setNotice(null);
+    setPlacesUpdatedAt(null);
+    setCityUpdatedAt(null);
 
-    async function loadCityInfo(): Promise<void> {
+    async function load(): Promise<void> {
+      let cached: InfoSnapshot | null = null;
+
+      const messages = new Set<string>();
+
       try {
-        if (Platform.OS === "android") {
-          let permission =
-            await ExpoLocation.getForegroundPermissionsAsync();
+        const stored =
+          await loadInfoSnapshot(location.id);
 
-          if (controller.signal.aborted) {
-            return;
-          }
-
-          if (!permission.granted && permission.canAskAgain) {
-            permission =
-              await ExpoLocation.requestForegroundPermissionsAsync();
-          }
-
-          if (controller.signal.aborted) {
-            return;
-          }
-
-          if (!permission.granted) {
-            setCityStatus("permission-denied");
-            return;
-          }
-        }
-
-        const addresses =
-          await ExpoLocation.reverseGeocodeAsync({
-            latitude,
-            longitude,
-          });
-
-        // Ignore stale results from native reverse geocoding.
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        const address = addresses.find(
-          (item) => Boolean(item.city?.trim()),
-        );
-
-        const cityName = address?.city?.trim();
-
-        if (!cityName) {
-          setCityStatus("not-found");
-          return;
-        }
-
-        const city: CityInfo = {
-          name: cityName,
-          country: address?.country ?? null,
-          wikipedia: null,
-        };
-
-        setCityInfo(city);
-
-        try {
-          const article = await findWikipediaArticle(
-            cityName,
-            controller.signal,
-          );
-
-          if (controller.signal.aborted) {
-            return;
-          }
-
-          setCityInfo({
-            ...city,
-            wikipedia: article,
-          });
-
-          setCityStatus("found");
-        } catch {
-          if (!controller.signal.aborted) {
-            setCityStatus("wiki-error");
-          }
+        // Avoid restoring data for changed coordinates.
+        if (
+          stored &&
+          stored.latitude === latitude &&
+          stored.longitude === longitude
+        ) {
+          cached = stored;
         }
       } catch {
-        if (!controller.signal.aborted) {
-          setCityStatus("error");
-        }
+        messages.add(
+          "Saved information could not be loaded.",
+        );
       }
-    }
 
-    void loadCityInfo();
+      if (signal.aborted) return;
 
-    return () => controller.abort();
-  }, [latitude, longitude]);
+      let localPlaces = cached?.places ?? [];
+      let localCity = cached?.cityInfo ?? null;
 
-  // Load attractions and check their Wikipedia titles.
-  useEffect(() => {
-    const controller = new AbortController();
+      let localCityStatus: CityStatus =
+        cached?.cityStatus ?? "loading";
 
-    if (!isValidLocation(latitude, longitude)) {
-      setPlaces([]);
-      setError("Select a location with valid coordinates.");
-      setLoading(false);
+      let localPlacesDate =
+        cached?.placesUpdatedAt ?? null;
 
-      return () => controller.abort();
-    }
+      let localCityDate =
+        cached?.cityUpdatedAt ?? null;
 
-    async function enrichWithWikipedia(
-      results: TourismPlace[],
-    ): Promise<void> {
-      let nextIndex = 0;
+      // Old transient states should not remain as spinners offline.
+      localPlaces = localPlaces.map((place) => ({
+        ...place,
+        wikiStatus:
+          place.wikipedia
+            ? "found"
+            : place.wikiStatus === "loading"
+              ? "error"
+              : place.wikiStatus,
+      }));
 
-      const lookups = new Map<
-        string,
-        Promise<WikipediaArticle | null>
-      >();
+      if (
+        localCityStatus === "loading" &&
+        cached
+      ) {
+        localCityStatus = localCity
+          ? "found"
+          : "not-found";
+      }
 
-      async function worker(): Promise<void> {
-        while (!controller.signal.aborted) {
-          const index = nextIndex++;
+      setPlaces(localPlaces);
+      setCityInfo(localCity);
+      setCityStatus(localCityStatus);
+      setPlacesUpdatedAt(localPlacesDate);
+      setCityUpdatedAt(localCityDate);
 
-          if (index >= results.length) {
-            return;
-          }
+      if (cached) {
+        setLoading(false);
+      }
 
-          const place = results[index];
-          const name = place.name.trim();
+      if (
+        !isValidLocation(latitude, longitude)
+      ) {
+        setNotice(
+          "Select a location with valid coordinates.",
+        );
+        setCityStatus("not-found");
+        setLoading(false);
+        return;
+      }
 
-          let wikipedia: WikipediaArticle | null = null;
-          let wikiStatus: PlaceWithWikipedia["wikiStatus"];
+      setRefreshing(true);
 
-          try {
-            let lookup = lookups.get(name);
+      let placesSucceeded = false;
+      let citySucceeded = false;
 
-            if (!lookup) {
-              lookup = findWikipediaArticle(
-                name,
-                controller.signal,
-              );
+      const cachedById = new Map(
+        localPlaces.map((place) => [
+          place.public_id,
+          place,
+        ]),
+      );
 
-              lookups.set(name, lookup);
-            }
+      async function loadCity(): Promise<void> {
+        try {
+          // Reuse the saved city identity when available.
+          let city = localCity;
 
-            wikipedia = await lookup;
-            wikiStatus = wikipedia ? "found" : "not-found";
-          } catch {
-            if (controller.signal.aborted) {
+          if (!city) {
+            if (
+              Platform.OS !== "android" &&
+              Platform.OS !== "ios"
+            ) {
+              localCityStatus = "unsupported";
+              setCityStatus(localCityStatus);
               return;
             }
 
-            wikiStatus = "error";
+            if (Platform.OS === "android") {
+              let permission =
+                await ExpoLocation
+                  .getForegroundPermissionsAsync();
+
+              if (signal.aborted) return;
+
+              if (
+                !permission.granted &&
+                permission.canAskAgain
+              ) {
+                permission =
+                  await ExpoLocation
+                    .requestForegroundPermissionsAsync();
+              }
+
+              if (signal.aborted) return;
+
+              if (!permission.granted) {
+                localCityStatus =
+                  "permission-denied";
+
+                setCityStatus(localCityStatus);
+                return;
+              }
+            }
+
+            const addresses =
+              await ExpoLocation.reverseGeocodeAsync({
+                latitude,
+                longitude,
+              });
+
+            if (signal.aborted) return;
+
+            const address = addresses.find(
+              (item) => item.city?.trim(),
+            );
+
+            const cityName = address?.city?.trim();
+
+            if (!cityName) {
+              localCityStatus = "not-found";
+              setCityStatus(localCityStatus);
+              return;
+            }
+
+            city = {
+              name: cityName,
+              country: address?.country ?? null,
+              wikipedia: null,
+            };
+
+            citySucceeded = true;
+            localCityDate =
+              new Date().toISOString();
           }
 
-          if (controller.signal.aborted) {
-            return;
-          }
+          localCity = city;
+          setCityInfo(city);
 
-          setPlaces((current) =>
-            current.map((item) =>
-              item.public_id === place.public_id
-                ? {
-                    ...item,
-                    wikipedia,
-                    wikiStatus,
-                  }
-                : item,
-            ),
+          try {
+            const article =
+              await findWikipediaArticle(
+                city.name,
+                signal,
+              );
+
+            if (signal.aborted) return;
+
+            localCity = {
+              ...city,
+              wikipedia: article,
+            };
+
+            localCityStatus = "found";
+            localCityDate =
+              new Date().toISOString();
+
+            citySucceeded = true;
+
+            setCityInfo(localCity);
+            setCityStatus(localCityStatus);
+          } catch {
+            if (signal.aborted) return;
+
+            // Keep a previously found article.
+            localCityStatus = city.wikipedia
+              ? "found"
+              : "wiki-error";
+
+            setCityStatus(localCityStatus);
+
+            messages.add(
+              "Some Wikipedia information could not be updated.",
+            );
+          }
+        } catch {
+          if (signal.aborted) return;
+
+          localCityStatus = localCity
+            ? localCity.wikipedia
+              ? "found"
+              : "wiki-error"
+            : "error";
+
+          setCityStatus(localCityStatus);
+
+          messages.add(
+            "City information could not be updated.",
           );
         }
       }
 
-      const workerCount = Math.min(
-        WIKIPEDIA_CONCURRENCY,
-        results.length,
-      );
+      async function enrichPlaces(
+        results: TourismPlace[],
+      ): Promise<void> {
+        let nextIndex = 0;
 
-      await Promise.all(
-        Array.from(
-          { length: workerCount },
-          () => worker(),
-        ),
-      );
-    }
+        const lookups = new Map<
+          string,
+          Promise<WikipediaArticle | null>
+        >();
 
-    async function loadPlaces(): Promise<void> {
-      setLoading(true);
-      setError(null);
-      setPlaces([]);
+        async function worker(): Promise<void> {
+          while (!signal.aborted) {
+            const index = nextIndex++;
 
-      try {
-        const results = await getTourismPlacesWithin5Km({
-          apiKey: WOOSMAP_API_KEY,
-          location: {
+            if (index >= results.length) return;
+
+            const place = results[index];
+            const name = place.name.trim();
+
+            const previous =
+              cachedById.get(place.public_id);
+
+            let wikipedia =
+              previous?.wikipedia ?? null;
+
+            let wikiStatus:
+              PlaceWithWikipedia["wikiStatus"];
+
+            try {
+              let lookup = lookups.get(name);
+
+              if (!lookup) {
+                lookup = findWikipediaArticle(
+                  name,
+                  signal,
+                );
+
+                lookups.set(name, lookup);
+              }
+
+              wikipedia = await lookup;
+
+              wikiStatus = wikipedia
+                ? "found"
+                : "not-found";
+            } catch {
+              if (signal.aborted) return;
+
+              wikiStatus = wikipedia
+                ? "found"
+                : "error";
+
+              messages.add(
+                "Some Wikipedia information could not be updated.",
+              );
+            }
+
+            if (signal.aborted) return;
+
+            localPlaces[index] = {
+              ...place,
+              wikipedia,
+              wikiStatus,
+            };
+
+            setPlaces([...localPlaces]);
+          }
+        }
+
+        await Promise.all(
+          Array.from(
+            {
+              length: Math.min(
+                WIKIPEDIA_CONCURRENCY,
+                results.length,
+              ),
+            },
+            () => worker(),
+          ),
+        );
+      }
+
+      async function loadPlaces(): Promise<void> {
+        try {
+          const results =
+            await getTourismPlacesWithin5Km({
+              apiKey: WOOSMAP_API_KEY,
+              location: {
+                latitude,
+                longitude,
+              },
+              signal,
+            });
+
+          if (signal.aborted) return;
+
+          placesSucceeded = true;
+
+          localPlacesDate =
+            new Date().toISOString();
+
+          localPlaces = results.map((place) => {
+            const previous =
+              cachedById.get(place.public_id);
+
+            return {
+              ...place,
+              wikipedia:
+                previous?.wikipedia ?? null,
+              wikiStatus: "loading",
+            };
+          });
+
+          setPlaces([...localPlaces]);
+          setPlacesUpdatedAt(localPlacesDate);
+          setLoading(false);
+
+          await enrichPlaces(results);
+        } catch (cause) {
+          if (signal.aborted) return;
+
+          messages.add(
+            cached?.placesUpdatedAt
+              ? "Nearby information could not be updated. " +
+                  "Showing saved places."
+              : "We couldn't load nearby places. " +
+                  "Check your internet connection and try again.",
+          );
+
+          if (__DEV__) {
+            console.log(
+              "Info request diagnostic:",
+              cause instanceof Error
+                ? cause.message
+                : String(cause),
+            );
+          }
+        } finally {
+          if (!signal.aborted) {
+            setLoading(false);
+          }
+        }
+      }
+
+      await Promise.all([
+        loadCity(),
+        loadPlaces(),
+      ]);
+
+      if (signal.aborted) return;
+
+      setPlacesUpdatedAt(localPlacesDate);
+      setCityUpdatedAt(localCityDate);
+
+      // Do not replace a saved snapshot with a total network failure.
+      if (placesSucceeded || citySucceeded) {
+        try {
+          await saveInfoSnapshot({
+            locationId: location.id,
+            locationName:
+              location.real_location,
             latitude,
             longitude,
-          },
-          signal: controller.signal,
-        });
-
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        const initialPlaces: PlaceWithWikipedia[] =
-          results.map((place) => ({
-            ...place,
-            wikipedia: null,
-            wikiStatus: "loading",
-          }));
-
-        setPlaces(initialPlaces);
-        setLoading(false);
-
-        await enrichWithWikipedia(results);
-      } catch {
-        if (!controller.signal.aborted) {
-          setError(
-            "Unable to load nearby places. Please try again later.",
+            cityInfo: localCity,
+            cityStatus: localCityStatus,
+            places: localPlaces,
+            placesUpdatedAt: localPlacesDate,
+            cityUpdatedAt: localCityDate,
+          });
+        } catch {
+          messages.add(
+            "The latest information could not be saved for offline use.",
           );
         }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
       }
+
+      if (signal.aborted) return;
+
+      setNotice(
+        messages.size > 0
+          ? [...messages].join(" ")
+          : null,
+      );
+
+      setLoading(false);
+      setRefreshing(false);
     }
 
-    void loadPlaces();
+    void load();
 
-    return () => controller.abort();
-  }, [latitude, longitude]);
+    return () => {
+      controller.abort();
+    };
+  }, [
+    location.id,
+    location.real_location,
+    latitude,
+    longitude,
+    attempt,
+  ]);
 
-  function openWikipedia(article: WikipediaArticle): void {
+  function openWikipedia(
+    article: WikipediaArticle,
+  ): void {
     navigation.navigate("Wikipedia", {
       title: article.title,
       url: article.url,
     });
   }
 
-  function renderCityInfo() {
-    const article = cityInfo?.wikipedia;
+  function renderArticleName(
+    name: string,
+    article: WikipediaArticle | null,
+    searching: boolean,
+  ) {
+    if (article) {
+      return (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            `Open Wikipedia article for ${name}`
+          }
+          onPress={() => openWikipedia(article)}
+          style={({ pressed }) => [
+            styles.nameRow,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text
+            style={[styles.name, styles.link]}
+          >
+            {name}
+          </Text>
 
+          <Text
+            accessible={false}
+            style={styles.arrow}
+          >
+            ›
+          </Text>
+        </Pressable>
+      );
+    }
+
+    return (
+      <View style={styles.nameRow}>
+        <Text style={styles.name}>
+          {name}
+        </Text>
+
+        {searching && (
+          <ActivityIndicator
+            size="small"
+            style={styles.wikiSpinner}
+          />
+        )}
+      </View>
+    );
+  }
+
+  function renderCityInfo() {
     let unavailableMessage =
       "No city could be identified for this location.";
 
@@ -370,53 +631,25 @@ export default function InfoTab() {
         "City detection is available on Android and iOS.";
     } else if (cityStatus === "error") {
       unavailableMessage =
-        "City information could not be loaded.";
+        "City information is unavailable. " +
+        "Connect to the internet and try again.";
     }
+
+    const article = cityInfo?.wikipedia;
 
     return (
       <View style={styles.citySection}>
-        <Text style={styles.heading}>City Info</Text>
+        <Text style={styles.heading}>
+          City Info
+        </Text>
 
         <View style={styles.card}>
           {cityInfo ? (
             <>
-              {article ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    `Open Wikipedia article for ${cityInfo.name}`
-                  }
-                  onPress={() => openWikipedia(article)}
-                  style={({ pressed }) => [
-                    styles.nameRow,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={[styles.name, styles.link]}>
-                    {cityInfo.name}
-                  </Text>
-
-                  <Text
-                    accessible={false}
-                    style={styles.arrow}
-                  >
-                    ›
-                  </Text>
-                </Pressable>
-              ) : (
-                <View style={styles.nameRow}>
-                  <Text style={styles.name}>
-                    {cityInfo.name}
-                  </Text>
-
-                  {cityStatus === "loading" && (
-                    <ActivityIndicator
-                      size="small"
-                      accessibilityLabel="Searching Wikipedia"
-                      style={styles.wikiSpinner}
-                    />
-                  )}
-                </View>
+              {renderArticleName(
+                cityInfo.name,
+                article ?? null,
+                cityStatus === "loading",
               )}
 
               {cityInfo.country && (
@@ -429,27 +662,39 @@ export default function InfoTab() {
                 <Text style={styles.wikiHint}>
                   Wikipedia: {article.title}
                   {" · "}
-                  {WIKIPEDIA_LANGUAGE_LABELS[article.language]}
+                  {LANGUAGE_LABELS[
+                    article.language
+                  ]}
                 </Text>
               )}
 
-              {cityStatus === "found" && !article && (
-                <Text style={styles.wikiHint}>
-                  No exact Wikipedia article was found for this city.
-                </Text>
-              )}
+              {cityStatus === "found" &&
+                !article && (
+                  <Text style={styles.wikiHint}>
+                    No exact Wikipedia article was
+                    found for this city.
+                  </Text>
+                )}
 
               {cityStatus === "wiki-error" && (
-                <Text style={styles.wikiError}>
-                  Wikipedia search could not be completed.
+                <Text style={styles.wikiHint}>
+                  Wikipedia information is
+                  temporarily unavailable.
+                </Text>
+              )}
+
+              {cityUpdatedAt && (
+                <Text style={styles.wikiHint}>
+                  Last updated:{" "}
+                  {formatDate(cityUpdatedAt)}
                 </Text>
               )}
             </>
           ) : cityStatus === "loading" ? (
-            <View style={styles.cityLoading}>
+            <View style={styles.statusRow}>
               <ActivityIndicator size="small" />
 
-              <Text style={styles.cityLoadingText}>
+              <Text style={styles.rowText}>
                 Loading city information…
               </Text>
             </View>
@@ -466,18 +711,80 @@ export default function InfoTab() {
   return (
     <View style={styles.container}>
       <FlatList<PlaceWithWikipedia>
-        data={loading || error ? [] : places}
-        keyExtractor={(item) => item.public_id}
+        data={places}
+        keyExtractor={(item) =>
+          item.public_id
+        }
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <>
+            <View style={styles.offlineBanner}>
+              <Text style={styles.bannerTitle}>
+                Information and offline reading
+              </Text>
+
+              <Text style={styles.bannerText}>
+                Place information is saved
+                automatically after loading.
+                Open a Wikipedia article while
+                connected to save its text for
+                offline reading.
+              </Text>
+
+              {refreshing && (
+                <View style={styles.statusRow}>
+                  <ActivityIndicator size="small" />
+
+                  <Text style={styles.rowText}>
+                    Checking for updated information…
+                  </Text>
+                </View>
+              )}
+
+              {notice && (
+                <Text style={styles.noticeText}>
+                  {notice}
+                </Text>
+              )}
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={
+                  loading || refreshing
+                }
+                onPress={() =>
+                  setAttempt(
+                    (value) => value + 1,
+                  )
+                }
+                style={[
+                  styles.refreshButton,
+                  (loading || refreshing) &&
+                    styles.disabled,
+                ]}
+              >
+                <Text
+                  style={styles.refreshButtonText}
+                >
+                  Refresh information
+                </Text>
+              </Pressable>
+            </View>
+
             {renderCityInfo()}
 
             <Text style={styles.heading}>
               Nearby Attractions
             </Text>
 
-            {!loading && !error && (
+            {placesUpdatedAt && (
+              <Text style={styles.count}>
+                Last updated:{" "}
+                {formatDate(placesUpdatedAt)}
+              </Text>
+            )}
+
+            {!loading && (
               <Text style={styles.count}>
                 {places.length === 1
                   ? "1 place found"
@@ -492,19 +799,14 @@ export default function InfoTab() {
               <ActivityIndicator size="large" />
 
               <Text style={styles.statusText}>
-                Searching for nearby places…
+                Loading nearby information…
               </Text>
             </View>
-          ) : error ? (
-            <Text
-              accessibilityRole="alert"
-              style={styles.error}
-            >
-              {error}
-            </Text>
           ) : (
             <Text style={styles.empty}>
-              No tourist attractions were found in this area.
+              {placesUpdatedAt
+                ? "No tourist attractions were found in the saved or latest result."
+                : "No saved places are available yet. Connect to the internet and refresh."}
             </Text>
           )
         }
@@ -512,61 +814,34 @@ export default function InfoTab() {
           const article = item.wikipedia;
 
           const categories = item.types
-            .filter((type) => type !== "point_of_interest")
+            .filter(
+              (type) =>
+                type !== "point_of_interest",
+            )
             .join(", ");
 
           return (
             <View style={styles.card}>
-              {article ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    `Open Wikipedia article for ${item.name}`
-                  }
-                  onPress={() => openWikipedia(article)}
-                  style={({ pressed }) => [
-                    styles.nameRow,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={[styles.name, styles.link]}>
-                    {item.name}
-                  </Text>
-
-                  <Text
-                    accessible={false}
-                    style={styles.arrow}
-                  >
-                    ›
-                  </Text>
-                </Pressable>
-              ) : (
-                <View style={styles.nameRow}>
-                  <Text style={styles.name}>
-                    {item.name}
-                  </Text>
-
-                  {item.wikiStatus === "loading" && (
-                    <ActivityIndicator
-                      size="small"
-                      accessibilityLabel="Searching Wikipedia"
-                      style={styles.wikiSpinner}
-                    />
-                  )}
-                </View>
+              {renderArticleName(
+                item.name,
+                article,
+                item.wikiStatus === "loading",
               )}
 
               {article && (
                 <Text style={styles.wikiHint}>
                   Wikipedia: {article.title}
                   {" · "}
-                  {WIKIPEDIA_LANGUAGE_LABELS[article.language]}
+                  {LANGUAGE_LABELS[
+                    article.language
+                  ]}
                 </Text>
               )}
 
               {item.wikiStatus === "error" && (
-                <Text style={styles.wikiError}>
-                  Wikipedia search could not be completed.
+                <Text style={styles.wikiHint}>
+                  Wikipedia information is
+                  temporarily unavailable.
                 </Text>
               )}
 
@@ -592,7 +867,7 @@ export default function InfoTab() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#f8fafc",
   },
   list: {
     padding: 16,
@@ -602,41 +877,13 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     marginBottom: 16,
-    color: "#0F172A",
+    color: "#0f172a",
   },
   citySection: {
     marginBottom: 12,
   },
-  cityLoading: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  cityLoadingText: {
-    flex: 1,
-    marginLeft: 10,
-    color: "#64748B",
-  },
-  status: {
-    paddingVertical: 24,
-    alignItems: "center",
-  },
-  statusText: {
-    marginTop: 12,
-    color: "#64748B",
-  },
-  error: {
-    color: "#B91C1C",
-  },
-  count: {
-    marginBottom: 12,
-    color: "#64748B",
-  },
-  empty: {
-    color: "#475569",
-  },
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#fff",
     padding: 16,
     borderRadius: 10,
     marginBottom: 12,
@@ -650,15 +897,15 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 17,
     fontWeight: "600",
-    color: "#0F172A",
+    color: "#0f172a",
   },
   link: {
-    color: "#2563EB",
+    color: "#2563eb",
   },
   arrow: {
     marginLeft: 12,
     fontSize: 32,
-    color: "#2563EB",
+    color: "#2563eb",
   },
   wikiSpinner: {
     marginLeft: 12,
@@ -667,22 +914,79 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   wikiHint: {
-    marginTop: 4,
+    marginTop: 6,
     fontSize: 12,
-    color: "#64748B",
-  },
-  wikiError: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#B45309",
+    color: "#64748b",
   },
   address: {
-    marginTop: 8,
+    marginTop: 6,
     color: "#475569",
   },
   category: {
-    marginTop: 6,
+    marginTop: 8,
     fontSize: 12,
-    color: "#64748B",
+    color: "#64748b",
+  },
+  empty: {
+    color: "#475569",
+    lineHeight: 21,
+  },
+  count: {
+    marginBottom: 12,
+    color: "#64748b",
+  },
+  status: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
+  statusText: {
+    marginTop: 12,
+    color: "#64748b",
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  rowText: {
+    flex: 1,
+    marginLeft: 10,
+    color: "#64748b",
+  },
+  offlineBanner: {
+    padding: 16,
+    marginBottom: 20,
+    borderRadius: 12,
+    backgroundColor: "#eff6ff",
+  },
+  bannerTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e3a8a",
+    marginBottom: 6,
+  },
+  bannerText: {
+    color: "#475569",
+    lineHeight: 20,
+  },
+  noticeText: {
+    marginTop: 10,
+    color: "#475569",
+    lineHeight: 20,
+  },
+  refreshButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: "#2563eb",
+  },
+  refreshButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  disabled: {
+    opacity: 0.5,
   },
 });
