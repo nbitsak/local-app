@@ -1,5 +1,6 @@
 import * as SQLite from "expo-sqlite";
 
+//Description of location type
 export type Location = {
   id: number;
   real_location: string;
@@ -10,8 +11,10 @@ export type Location = {
   source_url: string;
 };
 
+// Description of new location type 
 export type NewLocation = Omit<Location, "id">;
 
+// Description of result of saving location
 export type SaveLocationResult =
   | {
       saved: true;
@@ -23,11 +26,16 @@ export type SaveLocationResult =
       distanceMeters: number;
     };
 
+// Minimum distance to register a new location
 const MIN_DISTANCE_METERS = 100;
 
+// Initialization of Database
 async function initializeDatabase() {
   const db = await SQLite.openDatabaseAsync("locations.db");
 
+// Creation of table if it not exists already
+// type of database record is
+// id,real_location_city, country_code, latitude, longitude, source_url
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS locations (
       id INTEGER PRIMARY KEY,
@@ -52,6 +60,7 @@ let databasePromise:
   | ReturnType<typeof initializeDatabase>
   | undefined;
 
+//function to get database data
 function getDatabase() {
   if (!databasePromise) {
     databasePromise = initializeDatabase().catch((error) => {
@@ -63,10 +72,12 @@ function getDatabase() {
   return databasePromise;
 }
 
+//function to convert degrees to radians
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
 
+//function to calculate distance in meters between locations
 function distanceInMeters(
   latitude1: number,
   longitude1: number,
@@ -84,7 +95,7 @@ function distanceInMeters(
       Math.cos(toRadians(latitude2)) *
       Math.sin(deltaLongitude / 2) ** 2;
 
-  // Προστασία από μικρά σφάλματα κινητής υποδιαστολής.
+  // protection from minor mistakes
   const clampedA = Math.max(0, Math.min(1, a));
 
   const angularDistance =
@@ -97,11 +108,12 @@ function distanceInMeters(
   return earthRadiusMeters * angularDistance;
 }
 
-// Σειριοποιεί τις κλήσεις αυτής της συνάρτησης,
-// ώστε δύο παράλληλες προσπάθειες να μη διαβάσουν
-// τα ίδια παλιά δεδομένα πριν από την αποθήκευση.
+// serializes this function calls
+// as two parallel tries not to read
+// same old data before saving
 let saveQueue: Promise<void> = Promise.resolve();
 
+//function to save location if it is far enough from already saved
 export function saveLocationIfFarEnough(
   location: NewLocation
 ): Promise<SaveLocationResult> {
@@ -117,6 +129,7 @@ export function saveLocationIfFarEnough(
   return operation;
 }
 
+//function to check if location is eligible, and save it to db
 async function checkAndSaveLocation(
   location: NewLocation
 ): Promise<SaveLocationResult> {
@@ -158,7 +171,6 @@ async function checkAndSaveLocation(
       }
     }
 
-    // Ακριβώς στα 100 μέτρα επίσης δεν αποθηκεύουμε.
     if (
       nearestLocation &&
       nearestDistance <= MIN_DISTANCE_METERS

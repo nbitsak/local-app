@@ -16,6 +16,7 @@ import LocationDetailsScreen from "./src/screens/LocationDetailsScreen";
 import WikipediaScreen from "./src/screens/WikipediaScreen";
 import SelectedPlacesMapScreen from "./src/screens/SelectedPlacesMapScreen";
 
+//define the root stack along with screens inside 
 const RootStack = createNativeStackNavigator({
   screens: {
     Home: {
@@ -32,6 +33,7 @@ const RootStack = createNativeStackNavigator({
       },
     },
 
+    //title of Location screen is initially "Map" (it changes when other tab is selected)
     LocationDetails: {
       screen: LocationDetailsScreen,
       options: ({ route }) => ({
@@ -58,6 +60,7 @@ const RootStack = createNativeStackNavigator({
 
 const Navigation = createStaticNavigation(RootStack);
 
+//initial screen of app is Navigation
 export default function App() {
   return (
     <SafeAreaProvider>

@@ -1,8 +1,10 @@
+//define coordinates type 
 export type Coordinates = {
   latitude: number;
   longitude: number;
 };
 
+//define tourism place type 
 export type TourismPlace = {
   public_id: string;
   name: string;
@@ -16,6 +18,7 @@ export type TourismPlace = {
   } | null;
 };
 
+//define search options type 
 type SearchOptions = {
   // Supply an actual private key, not a public woos- key.
   apiKey: string;
@@ -29,19 +32,25 @@ type SearchOptions = {
   debug?: boolean;
 };
 
+//define nearrby search options type 
 type NearbySearchOptions = SearchOptions & {
   types: readonly string[];
 };
 
+//define nearby page type 
 type NearbyPage = {
   results: TourismPlace[];
   nextPage: number | null;
 };
 
+// define api endpoint for url 
 const ENDPOINT = "https://api.woosmap.com/localities/nearby/";
+// define radious
 const RADIUS_METERS = 2000;
+// define locations page size
 const PAGE_SIZE = 10;
 
+//function to determine if value is an object
 function isObject(
   value: unknown,
 ): value is Record<string, unknown> {
@@ -52,6 +61,7 @@ function isObject(
   );
 }
 
+//function to encode parameters
 function encodeQuery(params: Record<string, string>): string {
   return Object.entries(params)
     .map(
@@ -61,6 +71,7 @@ function encodeQuery(params: Record<string, string>): string {
     .join("&");
 }
 
+//function to validate that location is eligible
 function validateLocation(location: Coordinates): void {
   const { latitude, longitude } = location;
 
@@ -76,6 +87,7 @@ function validateLocation(location: Coordinates): void {
   }
 }
 
+//function to parse a place
 function parsePlace(
   value: unknown,
   index: number,
@@ -145,6 +157,7 @@ function parsePlace(
   return place;
 }
 
+//function to parse a nearby page
 function parseNearbyPage(value: unknown): NearbyPage {
   if (!isObject(value)) {
     throw new Error(
@@ -210,6 +223,7 @@ function parseNearbyPage(value: unknown): NearbyPage {
   };
 }
 
+//function to get api error message
 function getApiErrorMessage(
   status: number,
   body: unknown,
@@ -226,7 +240,7 @@ function getApiErrorMessage(
   return `Woosmap request failed (HTTP ${status}).`;
 }
 
-// Keep this export and its default behavior for InfoTab.
+// function to get tourism places with radius
 // Despite its legacy name, the configured radius remains 2000 meters.
 export async function getTourismPlacesWithin5Km({
   apiKey,

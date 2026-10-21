@@ -1,3 +1,4 @@
+//define forecase period type 
 export type ForecastPeriod = {
   timestamp: number;
   dateTimeISO: string;
@@ -10,6 +11,7 @@ export type ForecastPeriod = {
   windSpeedKPH: number | null;
 };
 
+// define forecast location type
 type ForecastLocation = {
   periods: ForecastPeriod[];
   profile: {
@@ -17,6 +19,7 @@ type ForecastLocation = {
   };
 };
 
+//define forecast api response type
 type ForecastApiResponse = {
   success: boolean;
   error?: {
@@ -26,6 +29,7 @@ type ForecastApiResponse = {
   response?: ForecastLocation[] | null;
 };
 
+//define forecast result type
 export type ForecastResult = {
   timezone: string;
   today: ForecastPeriod | null;
@@ -33,6 +37,7 @@ export type ForecastResult = {
   week: ForecastPeriod[];
 };
 
+//define forecast options type
 export type ForecastOptions = {
   latitude: number;
   longitude: number;
@@ -41,8 +46,10 @@ export type ForecastOptions = {
   signal?: AbortSignal;
 };
 
+// define forecast filter type
 type ForecastFilter = "day" | "1hr";
 
+// define XWeather forecast error
 export class XweatherForecastError extends Error {
   readonly status: number | null;
   readonly filter: ForecastFilter;
@@ -67,6 +74,7 @@ export class XweatherForecastError extends Error {
   }
 }
 
+// function to ensure Xweather credentials are ok 
 function redactCredentials(
   text: string,
   options: ForecastOptions,
@@ -86,6 +94,7 @@ function redactCredentials(
   return result;
 }
 
+//function to get local date
 function localDateKey(date: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -107,13 +116,16 @@ function localDateKey(date: Date, timezone: string): string {
   return `${getPart("year")}-${getPart("month")}-${getPart("day")}`;
 }
 
+//function to validate forecast options
 function validateOptions(options: ForecastOptions): void {
   const { latitude, longitude, clientId, clientSecret } = options;
 
+  //show error if credentials are not ok
   if (!clientId?.trim() || !clientSecret?.trim()) {
     throw new Error("Missing Xweather client ID or client secret.");
   }
 
+  //show error if location is invalid
   if (
     !Number.isFinite(latitude) ||
     !Number.isFinite(longitude) ||
@@ -124,6 +136,7 @@ function validateOptions(options: ForecastOptions): void {
   }
 }
 
+//function to request a forecast
 async function requestForecast(
   options: ForecastOptions,
   filter: ForecastFilter,
@@ -138,6 +151,7 @@ async function requestForecast(
     limit: String(limit),
   };
 
+  //encoding of location
   const query = Object.entries(params)
     .map(
       ([key, value]) =>
@@ -145,12 +159,14 @@ async function requestForecast(
     )
     .join("&");
 
+  //api url
   const url =
     "https://data.api.xweather.com/forecasts/" +
     `${encodeURIComponent(location)}?${query}`;
 
   let response: Response;
 
+  //asynchronous weather data gathering call
   try {
     response = await fetch(url, {
       method: "GET",
@@ -170,6 +186,7 @@ async function requestForecast(
       options,
     );
 
+    //throw forecast network error
     throw new XweatherForecastError({
       message:
         `Xweather network error [filter=${filter}, limit=${limit}]: ` +
@@ -182,6 +199,7 @@ async function requestForecast(
   const rawBody = await response.text();
   const safeBody = redactCredentials(rawBody, options).slice(0, 1500);
 
+  //throw forecast response error
   if (!response.ok) {
     throw new XweatherForecastError({
       message:
@@ -196,6 +214,7 @@ async function requestForecast(
 
   let parsed: unknown;
 
+  //throw forecast json error
   try {
     parsed = JSON.parse(rawBody);
   } catch {
@@ -206,7 +225,8 @@ async function requestForecast(
       details: safeBody,
     });
   }
-
+  
+  //throw forecast response error
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new XweatherForecastError({
       message: `Xweather returned an invalid response [filter=${filter}].`,
@@ -226,7 +246,8 @@ async function requestForecast(
         : "Forecast request failed.";
 
     const details = redactCredentials(description, options);
-
+    
+    //throw forecast api error
     throw new XweatherForecastError({
       message: `Xweather API error [filter=${filter}]: ${details}`,
       status: response.status,
@@ -238,7 +259,9 @@ async function requestForecast(
   const forecast = Array.isArray(data.response)
     ? data.response[0]
     : undefined;
-
+    
+    
+    //throw forecast no data error
   if (!forecast || !Array.isArray(forecast.periods)) {
     throw new XweatherForecastError({
       message: `Xweather returned no forecast data [filter=${filter}].`,
@@ -248,6 +271,7 @@ async function requestForecast(
     });
   }
 
+      //throw forecast wrong timezone  error
   if (
     typeof forecast.profile?.tz !== "string" ||
     !forecast.profile.tz
@@ -260,9 +284,11 @@ async function requestForecast(
     });
   }
 
+  //return forecast object
   return forecast;
 }
 
+//function to get forecasts, both daily (7 days) and hourly (hours left to 0:00am)
 export async function getForecasts(
   options: ForecastOptions,
 ): Promise<ForecastResult> {
