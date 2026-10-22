@@ -1,3 +1,4 @@
+//define location type
 export type Location = {
   id: number;
   real_location: string;
@@ -8,6 +9,7 @@ export type Location = {
   source_url: string;
 };
 
+//define selected map place type
 export type SelectedMapPlace = {
   id: string;
   name: string;
@@ -17,6 +19,7 @@ export type SelectedMapPlace = {
   isStartingLocation: boolean;
 };
 
+//define root stack parameters list type
 export type RootStackParamList = {
   Home: undefined;
   PreviousLocations: undefined;
@@ -34,6 +37,7 @@ export type RootStackParamList = {
   };
 };
 
+//define location tab parameters list type
 export type LocationTabsParamList = {
   Map: undefined;
   Weather: undefined;
