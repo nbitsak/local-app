@@ -2,10 +2,11 @@
 
 import { Platform } from "react-native";
 
-// Replace the placeholder with a real contact email address.
+//define wikipedia user agent (e-mail) 
 const WIKIPEDIA_USER_AGENT =
   "LocalApp/1.0 (mailto:nbitsakidis@gmail.com)";
 
+//define wikipedia languages
 const WIKIPEDIA_LANGUAGES = [
   "el",
   "en",
@@ -13,15 +14,18 @@ const WIKIPEDIA_LANGUAGES = [
   "it",
 ] as const;
 
+//define wikipedia language type
 export type WikipediaLanguage =
   (typeof WIKIPEDIA_LANGUAGES)[number];
 
+//define wikipedia article type
 export type WikipediaArticle = {
   title: string;
   url: string;
   language: WikipediaLanguage;
 };
 
+//define wikipedia page type
 type WikipediaPage = {
   pageid?: number;
   ns?: number;
@@ -31,6 +35,7 @@ type WikipediaPage = {
   redirect?: boolean;
 };
 
+//define wikipedia response type
 type WikipediaResponse = {
   error?: {
     code?: string;
@@ -41,6 +46,7 @@ type WikipediaResponse = {
   };
 };
 
+//function to clean title
 function cleanTitle(value: string): string {
   return value
     .normalize("NFC")
@@ -48,10 +54,12 @@ function cleanTitle(value: string): string {
     .replace(/\s+/g, " ");
 }
 
+//function to normalize title
 function normalizeTitle(value: string): string {
   return cleanTitle(value).toLowerCase();
 }
 
+//function for aborted wikipedia request 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
     const error = new Error(
@@ -63,6 +71,7 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
+//function for encoding wikipedia search term
 function encodeQuery(
   params: Record<string, string>,
 ): string {
@@ -74,6 +83,7 @@ function encodeQuery(
     .join("&");
 }
 
+//function for setting request header
 function getRequestHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -89,6 +99,7 @@ function getRequestHeaders(): Record<string, string> {
   return headers;
 }
 
+//function for getting wikipedia article
 async function getExactArticle(
   name: string,
   language: WikipediaLanguage,
@@ -107,6 +118,7 @@ async function getExactArticle(
     // Do not follow redirects to another article.
   });
 
+  //api url 
   const response = await fetch(
     `https://${language}.wikipedia.org/w/api.php?${query}`,
     {
@@ -200,6 +212,7 @@ async function getExactArticle(
   };
 }
 
+//function for finding if wikipedia article exists
 export async function findWikipediaArticle(
   name: string,
   signal?: AbortSignal,

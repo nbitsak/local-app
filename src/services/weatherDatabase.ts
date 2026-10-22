@@ -6,6 +6,7 @@ import type {
   ForecastResult,
 } from "./xweatherForecast";
 
+//define weather location type 
 export type WeatherLocation = {
   id: number;
   name: string;
@@ -13,6 +14,7 @@ export type WeatherLocation = {
   longitude: number;
 };
 
+//define saved forecast summary type
 export type SavedForecastSummary = {
   id: number;
   location_id: number;
@@ -23,15 +25,18 @@ export type SavedForecastSummary = {
   saved_at: string;
 };
 
+//define saved forecast type
 export type SavedForecast = SavedForecastSummary & {
   forecast: ForecastResult;
 };
 
+//define saved forecast row type
 type SavedForecastRow = SavedForecastSummary & {
   schema_version: number;
   forecast_json: string;
 };
 
+//define database name
 const DATABASE_NAME = "weather.db";
 const SNAPSHOT_VERSION = 1;
 
@@ -39,12 +44,16 @@ let databasePromise:
   | Promise<SQLite.SQLiteDatabase>
   | null = null;
 
+// Initialization of Database
 async function initializeDatabase():
   Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync(
     DATABASE_NAME,
   );
 
+  // Creation of table saved_weather_forecasts if it not exists already
+  // type of database record is
+  // id,location_name, latitude, longitude, fetched_at, schema_version
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
@@ -79,6 +88,7 @@ async function initializeDatabase():
   return db;
 }
 
+//function to get database data
 async function getDatabase():
   Promise<SQLite.SQLiteDatabase> {
   if (!databasePromise) {
@@ -93,6 +103,7 @@ async function getDatabase():
   return databasePromise;
 }
 
+//function to check if location is eligible
 function validateLocation(
   location: WeatherLocation,
 ): void {
@@ -112,6 +123,7 @@ function validateLocation(
   }
 }
 
+//function to check if value is an object
 function isObject(
   value: unknown,
 ): value is Record<string, unknown> {
@@ -122,6 +134,7 @@ function isObject(
   );
 }
 
+//function to parse stored forecast
 function parseStoredForecast(
   json: string,
 ): ForecastResult {
@@ -154,6 +167,7 @@ function parseStoredForecast(
   return value as unknown as ForecastResult;
 }
 
+//function to save weather forecast to db
 export async function saveWeatherForecast({
   location,
   forecast,
@@ -220,6 +234,7 @@ export async function saveWeatherForecast({
   };
 }
 
+//function to get a weather forecast list from db
 export async function listSavedWeatherForecasts(
   locationId: number,
 ): Promise<SavedForecastSummary[]> {
@@ -243,6 +258,7 @@ export async function listSavedWeatherForecasts(
   );
 }
 
+//function to get a weather forecast from db
 export async function getSavedWeatherForecast(
   id: number,
   locationId: number,

@@ -33,7 +33,7 @@ const MIN_DISTANCE_METERS = 100;
 async function initializeDatabase() {
   const db = await SQLite.openDatabaseAsync("locations.db");
 
-// Creation of table if it not exists already
+// Creation of table locations if it not exists already
 // type of database record is
 // id,real_location_city, country_code, latitude, longitude, source_url
   await db.execAsync(`

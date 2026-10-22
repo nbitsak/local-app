@@ -6,10 +6,11 @@ import type {
   OfflineWikipediaArticle,
 } from "./infoDatabase";
 
-// Use the same real contact address as services/wikipedia.ts.
+//declare mail address
 const USER_AGENT =
-  "LocalApp/1.0 (mailto:YOUR_REAL_CONTACT_EMAIL)";
+  "LocalApp/1.0 (mailto:nbitsakidis@gmail.com)";
 
+//define supported languages
 const SUPPORTED_LANGUAGES = [
   "el",
   "en",
@@ -17,6 +18,7 @@ const SUPPORTED_LANGUAGES = [
   "it",
 ];
 
+//function to display error
 function throwIfAborted(
   signal?: AbortSignal,
 ): void {
@@ -27,6 +29,7 @@ function throwIfAborted(
   }
 }
 
+//function to code html special charaqcters
 function escapeHtml(value: string): string {
   return value.replace(
     /[&<>"']/g,
@@ -44,6 +47,7 @@ function escapeHtml(value: string): string {
   );
 }
 
+//function to decide if value is an object
 function isObject(
   value: unknown,
 ): value is Record<string, unknown> {
@@ -54,6 +58,7 @@ function isObject(
   );
 }
 
+//function to parse wikipedia from url
 export function parseWikipediaUrl(
   value: string,
 ): {
@@ -110,6 +115,7 @@ export function parseWikipediaUrl(
   };
 }
 
+//fuction to build the offline html db record
 function buildOfflineHtml({
   title,
   content,
@@ -272,6 +278,7 @@ function buildOfflineHtml({
 `;
 }
 
+//function to download wikipedia article
 export async function downloadWikipediaArticle(
   url: string,
   signal?: AbortSignal,

@@ -6,6 +6,7 @@ import type {
   SelectedMapPlace,
 } from "../navigation/types";
 
+//define saved place row type
 type SavedPlaceRow = {
   place_id: string;
   name: string;
@@ -19,6 +20,7 @@ let databasePromise:
   | Promise<SQLite.SQLiteDatabase>
   | null = null;
 
+// Initialization of Database
 async function initializeDatabase():
   Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync("nearby.db");
@@ -26,6 +28,10 @@ async function initializeDatabase():
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
+    // Creation of table nearby_selected_places if it not exists already
+    // type of database record is
+    // origin_id, place_id, name, latitude, longitude, formatted_address,
+    // is_starting_location, sort_order, saved_at
     CREATE TABLE IF NOT EXISTS nearby_selected_places (
       origin_id TEXT NOT NULL,
       place_id TEXT NOT NULL,
@@ -52,6 +58,7 @@ async function initializeDatabase():
   return db;
 }
 
+//function to get database
 async function getDatabase():
   Promise<SQLite.SQLiteDatabase> {
   if (!databasePromise) {
@@ -64,6 +71,7 @@ async function getDatabase():
   return databasePromise;
 }
 
+//function to validate a place is legible
 function validatePlace(place: SelectedMapPlace): void {
   if (!place.id.trim() || !place.name.trim()) {
     throw new Error(
@@ -85,13 +93,7 @@ function validatePlace(place: SelectedMapPlace): void {
   }
 }
 
-/**
- * Save a complete selection for one starting location.
- *
- * The starting location is saved first.
- * Existing saved destinations for this origin are replaced.
- * Other starting locations are not affected.
- */
+//function to save nearby selection
 export async function saveNearbySelection(
   startingPlace: SelectedMapPlace,
   destinations: readonly SelectedMapPlace[],
@@ -167,12 +169,7 @@ export async function saveNearbySelection(
   });
 }
 
-/**
- * Load saved destinations for a starting location.
- *
- * The starting location itself is excluded because NearbyTab
- * already constructs it from SelectedLocationContext.
- */
+//function to load nearby selection
 export async function loadNearbySelection(
   originId: string,
 ): Promise<SelectedMapPlace[]> {
