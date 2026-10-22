@@ -2,9 +2,7 @@
 
 import * as SQLite from "expo-sqlite";
 
-import type {
-  SelectedMapPlace,
-} from "../navigation/types";
+import type { SelectedMapPlace } from "../navigation/types";
 
 //define saved place row type
 type SavedPlaceRow = {
@@ -16,22 +14,15 @@ type SavedPlaceRow = {
   is_starting_location: number;
 };
 
-let databasePromise:
-  | Promise<SQLite.SQLiteDatabase>
-  | null = null;
+let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 // Initialization of Database
-async function initializeDatabase():
-  Promise<SQLite.SQLiteDatabase> {
+async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync("nearby.db");
 
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
-    // Creation of table nearby_selected_places if it not exists already
-    // type of database record is
-    // origin_id, place_id, name, latitude, longitude, formatted_address,
-    // is_starting_location, sort_order, saved_at
     CREATE TABLE IF NOT EXISTS nearby_selected_places (
       origin_id TEXT NOT NULL,
       place_id TEXT NOT NULL,
@@ -59,8 +50,7 @@ async function initializeDatabase():
 }
 
 //function to get database
-async function getDatabase():
-  Promise<SQLite.SQLiteDatabase> {
+async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!databasePromise) {
     databasePromise = initializeDatabase().catch((error) => {
       databasePromise = null;
@@ -74,9 +64,7 @@ async function getDatabase():
 //function to validate a place is legible
 function validatePlace(place: SelectedMapPlace): void {
   if (!place.id.trim() || !place.name.trim()) {
-    throw new Error(
-      "A selected place must have an ID and a name.",
-    );
+    throw new Error("A selected place must have an ID and a name.");
   }
 
   if (
@@ -87,9 +75,7 @@ function validatePlace(place: SelectedMapPlace): void {
     place.longitude < -180 ||
     place.longitude > 180
   ) {
-    throw new Error(
-      `Invalid coordinates for "${place.name}".`,
-    );
+    throw new Error(`Invalid coordinates for "${place.name}".`);
   }
 }
 
@@ -102,8 +88,7 @@ export async function saveNearbySelection(
 
   const originId = startingPlace.id;
 
-  const uniqueDestinations =
-    new Map<string, SelectedMapPlace>();
+  const uniqueDestinations = new Map<string, SelectedMapPlace>();
 
   for (const destination of destinations) {
     validatePlace(destination);

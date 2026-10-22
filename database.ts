@@ -11,7 +11,7 @@ export type Location = {
   source_url: string;
 };
 
-// Description of new location type 
+// Description of new location type
 export type NewLocation = Omit<Location, "id">;
 
 // Description of result of saving location
@@ -33,9 +33,6 @@ const MIN_DISTANCE_METERS = 100;
 async function initializeDatabase() {
   const db = await SQLite.openDatabaseAsync("locations.db");
 
-// Creation of table locations if it not exists already
-// type of database record is
-// id,real_location_city, country_code, latitude, longitude, source_url
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS locations (
       id INTEGER PRIMARY KEY,
@@ -56,9 +53,7 @@ async function initializeDatabase() {
   return db;
 }
 
-let databasePromise:
-  | ReturnType<typeof initializeDatabase>
-  | undefined;
+let databasePromise: ReturnType<typeof initializeDatabase> | undefined;
 
 //function to get database data
 function getDatabase() {
@@ -82,7 +77,7 @@ function distanceInMeters(
   latitude1: number,
   longitude1: number,
   latitude2: number,
-  longitude2: number
+  longitude2: number,
 ): number {
   const earthRadiusMeters = 6_371_000;
 
@@ -99,11 +94,7 @@ function distanceInMeters(
   const clampedA = Math.max(0, Math.min(1, a));
 
   const angularDistance =
-    2 *
-    Math.atan2(
-      Math.sqrt(clampedA),
-      Math.sqrt(1 - clampedA)
-    );
+    2 * Math.atan2(Math.sqrt(clampedA), Math.sqrt(1 - clampedA));
 
   return earthRadiusMeters * angularDistance;
 }
@@ -115,15 +106,13 @@ let saveQueue: Promise<void> = Promise.resolve();
 
 //function to save location if it is far enough from already saved
 export function saveLocationIfFarEnough(
-  location: NewLocation
+  location: NewLocation,
 ): Promise<SaveLocationResult> {
-  const operation = saveQueue.then(() =>
-    checkAndSaveLocation(location)
-  );
+  const operation = saveQueue.then(() => checkAndSaveLocation(location));
 
   saveQueue = operation.then(
     () => undefined,
-    () => undefined
+    () => undefined,
   );
 
   return operation;
@@ -131,7 +120,7 @@ export function saveLocationIfFarEnough(
 
 //function to check if location is eligible, and save it to db
 async function checkAndSaveLocation(
-  location: NewLocation
+  location: NewLocation,
 ): Promise<SaveLocationResult> {
   if (
     !Number.isFinite(location.latitude) ||
@@ -149,10 +138,9 @@ async function checkAndSaveLocation(
   let outcome: SaveLocationResult | undefined;
 
   await db.withExclusiveTransactionAsync(async (txn) => {
-    const existingLocations =
-      await txn.getAllAsync<Location>(
-        "SELECT * FROM locations"
-      );
+    const existingLocations = await txn.getAllAsync<Location>(
+      "SELECT * FROM locations",
+    );
 
     let nearestLocation: Location | undefined;
     let nearestDistance = Infinity;
@@ -162,7 +150,7 @@ async function checkAndSaveLocation(
         location.latitude,
         location.longitude,
         existing.latitude,
-        existing.longitude
+        existing.longitude,
       );
 
       if (distance < nearestDistance) {
@@ -171,10 +159,7 @@ async function checkAndSaveLocation(
       }
     }
 
-    if (
-      nearestLocation &&
-      nearestDistance <= MIN_DISTANCE_METERS
-    ) {
+    if (nearestLocation && nearestDistance <= MIN_DISTANCE_METERS) {
       outcome = {
         saved: false,
         existingLocation: nearestLocation,
@@ -201,7 +186,7 @@ async function checkAndSaveLocation(
       location.country_code,
       location.latitude,
       location.longitude,
-      location.source_url
+      location.source_url,
     );
 
     outcome = {
@@ -214,9 +199,7 @@ async function checkAndSaveLocation(
   });
 
   if (!outcome) {
-    throw new Error(
-      "Δεν ολοκληρώθηκε ο έλεγχος αποθήκευσης."
-    );
+    throw new Error("Δεν ολοκληρώθηκε ο έλεγχος αποθήκευσης.");
   }
 
   return outcome;

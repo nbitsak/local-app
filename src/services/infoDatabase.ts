@@ -2,22 +2,14 @@
 
 import * as SQLite from "expo-sqlite";
 
-import type {
-  TourismPlace,
-} from "./woosmapTourism";
+import type { TourismPlace } from "./woosmapTourism";
 
-import type {
-  WikipediaArticle,
-} from "./wikipedia";
+import type { WikipediaArticle } from "./wikipedia";
 
 //define place with wikipedia type
 export type PlaceWithWikipedia = TourismPlace & {
   wikipedia: WikipediaArticle | null;
-  wikiStatus:
-    | "loading"
-    | "found"
-    | "not-found"
-    | "error";
+  wikiStatus: "loading" | "found" | "not-found" | "error";
 };
 
 //define city info type
@@ -81,33 +73,21 @@ type ArticleRow = {
   saved_at: string;
 };
 
-let databasePromise:
-  | Promise<SQLite.SQLiteDatabase>
-  | null = null;
+let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 // Initialization of Database
-async function initializeDatabase():
-  Promise<SQLite.SQLiteDatabase> {
-  const db = await SQLite.openDatabaseAsync(
-    "info.db",
-  );
+async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
+  const db = await SQLite.openDatabaseAsync("info.db");
 
- 
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
-     // Creation of table info_snapshots if it not exists already
-    // type of database record is
-    // location_id, snapshot_json, schema_version
     CREATE TABLE IF NOT EXISTS info_snapshots (
       location_id INTEGER PRIMARY KEY,
       snapshot_json TEXT NOT NULL,
       schema_version INTEGER NOT NULL DEFAULT 1
     );
 
-    // Creation of table offline_wikipedia_articles if it not exists already
-    // type of database record is
-    // source_url, title, language, page_id, revision_id, html_content, saved_at
     CREATE TABLE IF NOT EXISTS offline_wikipedia_articles (
       source_url TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -123,21 +103,18 @@ async function initializeDatabase():
 }
 
 //function to get database
-async function getDatabase():
-  Promise<SQLite.SQLiteDatabase> {
+async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!databasePromise) {
-    databasePromise = initializeDatabase().catch(
-      (error) => {
-        databasePromise = null;
-        throw error;
-      },
-    );
+    databasePromise = initializeDatabase().catch((error) => {
+      databasePromise = null;
+      throw error;
+    });
   }
 
   return databasePromise;
 }
 
-//function to load an info snapshot 
+//function to load an info snapshot
 export async function loadInfoSnapshot(
   locationId: number,
 ): Promise<InfoSnapshot | null> {
@@ -155,31 +132,24 @@ export async function loadInfoSnapshot(
   if (!row) return null;
 
   if (row.schema_version !== 1) {
-    throw new Error(
-      "Unsupported saved information version.",
-    );
+    throw new Error("Unsupported saved information version.");
   }
 
-  const snapshot =
-    JSON.parse(row.snapshot_json) as InfoSnapshot;
+  const snapshot = JSON.parse(row.snapshot_json) as InfoSnapshot;
 
   if (
     !snapshot ||
     snapshot.locationId !== locationId ||
     !Array.isArray(snapshot.places)
   ) {
-    throw new Error(
-      "The saved information is invalid.",
-    );
+    throw new Error("The saved information is invalid.");
   }
 
   return snapshot;
 }
 
 //function to save an info snapshot
-export async function saveInfoSnapshot(
-  snapshot: InfoSnapshot,
-): Promise<void> {
+export async function saveInfoSnapshot(snapshot: InfoSnapshot): Promise<void> {
   const db = await getDatabase();
 
   await db.runAsync(
