@@ -32,7 +32,7 @@ import {
 
 // Testing only. Use your existing credentials here.
 const XWEATHER_CLIENT_ID =
-  "oJmFhaLyES3fAlD3O88s";
+  "hoJmFhaLyES3fAlD3O88s";
 
 const XWEATHER_CLIENT_SECRET =
   "Q5oQYsfWMCNloYzDYeObKvCYxHbjboIHddzwjcxU";
